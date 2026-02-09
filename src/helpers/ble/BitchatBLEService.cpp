@@ -159,7 +159,10 @@ void BitchatBLEService::sendAnnouncement() {
   }
 
   // Build ANNOUNCE message
-  BitchatMessage msg;
+  // Use member variable to avoid stack overflow
+  memset(&_tempTxMessage, 0, sizeof(BitchatMessage));
+  BitchatMessage &msg = _tempTxMessage;
+
   msg.type = BITCHAT_MSG_ANNOUNCE;
   msg.ttl = 8;
   msg.setSenderId64(_peerId);

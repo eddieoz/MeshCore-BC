@@ -173,6 +173,12 @@ private:
   std::vector<OutgoingMessage>
       _outgoingQueue; // Using vector as simple queue to avoid <queue> header dependency if not already there
 
+  // Helper to sign BitChat messages
+  void signBitChatMessage(mesh::ble::BitchatMessage &msg);
+
+  // Buffer for signing (avoid stack allocation of ~2KB)
+  uint8_t _signingBuffer[2048 + 64];
+
   // Helpers
   bool isMeshChannel(const mesh::GroupChannel &channel) const;
   uint64_t derivePeerId(const mesh::LocalIdentity &identity);

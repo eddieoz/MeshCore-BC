@@ -123,8 +123,32 @@ void BitchatBridge::loop() {
 
     // Check clients before attempting send
     if (_bleService.hasConnectedClients()) {
-      if (_bleService.sendMessageToClients(msg.sender, msg.text, msg.timestamp)) {
-        Serial.println("[BitChat] Message sent to BitChat app via loop");
+      // Use member variable to avoid stack overflow
+      memset(&_tempLoopMessage, 0, sizeof(mesh::ble::BitchatMessage));
+      mesh::ble::BitchatMessage &bMsg = _tempLoopMessage;
+
+      bMsg.version = BITCHAT_VERSION;
+      bMsg.type = BITCHAT_MSG_MESSAGE;
+      bMsg.ttl = 8;
+      // Convert timestamp to ms if needed
+      bMsg.timestamp = (uint64_t)msg.timestamp;
+      if (bMsg.timestamp < 1000000000000ULL) bMsg.timestamp *= 1000ULL;
+
+      bMsg.setSenderId64(_bleService.getPeerId()); // Use local ID for signing
+
+      // Format payload: <Sender> Text
+      char formatted[256];
+      snprintf(formatted, sizeof(formatted), "<%s> %s", msg.sender, msg.text);
+      size_t len = strlen(formatted);
+      if (len > BITCHAT_MAX_PAYLOAD_SIZE) len = BITCHAT_MAX_PAYLOAD_SIZE;
+      bMsg.payloadLength = (uint16_t)len;
+      memcpy(bMsg.payload, formatted, len);
+
+      // Sign the message with local identity
+      signBitChatMessage(bMsg);
+
+      if (_bleService.sendBitchatMessage(bMsg)) {
+        Serial.println("[BitChat] Signed message sent to BitChat app via loop");
         _messagesRelayed++;
       } else {
         Serial.println("[BitChat] Failed to send queued message");
@@ -356,6 +380,47 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
 // ============================================================
 // Private Helpers
 // ============================================================
+
+void BitchatBridge::signBitChatMessage(mesh::ble::BitchatMessage &msg) {
+  // 1. Set the HAS_SIGNATURE flag
+  msg.flags |= BITCHAT_FLAG_HAS_SIGNATURE;
+
+  // 2. Serialize the message content for signing (excluding signature field itself)
+  // Use member buffer to avoid stack overflow (~2KB allocation on stack was killing it!)
+  // uint8_t buffer[BITCHAT_MAX_PAYLOAD_SIZE + 64];
+  size_t offset = 0;
+
+  _signingBuffer[offset++] = msg.version;
+  _signingBuffer[offset++] = msg.type;
+  _signingBuffer[offset++] = msg.ttl;
+
+  // Timestamp (Big Endian)
+  for (int i = 0; i < 8; i++) {
+    _signingBuffer[offset++] = (msg.timestamp >> ((7 - i) * 8)) & 0xFF;
+  }
+
+  _signingBuffer[offset++] = msg.flags;
+
+  // Payload Length (Big Endian)
+  _signingBuffer[offset++] = (msg.payloadLength >> 8) & 0xFF;
+  _signingBuffer[offset++] = (msg.payloadLength & 0xFF);
+
+  // Sender ID (Little Endian for BitChat ID)
+  memcpy(&_signingBuffer[offset], msg.senderId, BITCHAT_SENDER_ID_SIZE);
+  offset += BITCHAT_SENDER_ID_SIZE;
+
+  if (msg.hasRecipient()) {
+    memcpy(&_signingBuffer[offset], msg.recipientId, BITCHAT_RECIPIENT_ID_SIZE);
+    offset += BITCHAT_RECIPIENT_ID_SIZE;
+  }
+
+  memcpy(&_signingBuffer[offset], msg.payload, msg.payloadLength);
+  offset += msg.payloadLength;
+
+  // 3. Sign the buffer
+  // Use LocalIdentity::sign() which takes (sig, msg, len)
+  _identity.sign(msg.signature, _signingBuffer, offset);
+}
 
 bool BitchatBridge::isMeshChannel(const mesh::GroupChannel &channel) const {
   const uint8_t *meshKey = _channelRegistry.lookupByName("mesh");
