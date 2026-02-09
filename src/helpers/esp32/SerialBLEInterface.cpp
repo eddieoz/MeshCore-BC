@@ -250,3 +250,9 @@ size_t SerialBLEInterface::checkRecvFrame(uint8_t dest[]) {
 bool SerialBLEInterface::isConnected() const {
   return deviceConnected;  //pServer != NULL && pServer->getConnectedCount() > 0;
 }
+void SerialBLEInterface::addAdvertisingServiceUUID(const char* uuid) {
+  if (pServer != NULL) {
+    pServer->getAdvertising()->addServiceUUID(uuid);
+    BLE_DEBUG_PRINTLN("Added service UUID to advertising: %s", uuid);
+  }
+}

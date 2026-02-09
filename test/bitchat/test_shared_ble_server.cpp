@@ -6,6 +6,7 @@
 
 #include <unity.h>
 #include "helpers/ble/SharedBLEServer.h"
+#include "helpers/ble/BitchatBLEService.h"
 
 // Mock BLE classes for testing (when hardware not available)
 #ifdef NATIVE_TEST

@@ -88,6 +88,7 @@ class HomeScreen : public UIScreen {
 #if UI_SENSORS_PAGE == 1
     SENSORS,
 #endif
+    BLE_MODE,
     SHUTDOWN,
     Count    // keep as last
   };
@@ -378,6 +379,20 @@ public:
       if (sensors_scroll) sensors_scroll_offset = (sensors_scroll_offset+1)%sensors_nb;
       else sensors_scroll_offset = 0;
 #endif
+    } else if (_page == HomePage::BLE_MODE) {
+      display.setColor(DisplayDriver::GREEN);
+      // Show current BLE mode with large letter
+      bool bitchatMode = _task->isBitChatMode();
+      display.setTextSize(4);
+      if (bitchatMode) {
+        display.drawTextCentered(display.width() / 2, 14, "B");
+        display.setTextSize(1);
+        display.drawTextCentered(display.width() / 2, 50, "BitChat");
+      } else {
+        display.drawTextCentered(display.width() / 2, 14, "M");
+        display.setTextSize(1);
+        display.drawTextCentered(display.width() / 2, 50, "MeshCore");
+      }
     } else if (_page == HomePage::SHUTDOWN) {
       display.setColor(DisplayDriver::GREEN);
       display.setTextSize(1);
@@ -433,6 +448,17 @@ public:
       return true;
     }
 #endif
+    if (c == KEY_ENTER && _page == HomePage::BLE_MODE) {
+      // Toggle between MeshCore and BitChat BLE modes
+      if (_task->isBitChatMode()) {
+        _task->setBitChatMode(false);
+        _task->showAlert("MeshCore Mode", 1000);
+      } else {
+        _task->setBitChatMode(true);
+        _task->showAlert("BitChat Mode", 1000);
+      }
+      return true;
+    }
     if (c == KEY_ENTER && _page == HomePage::SHUTDOWN) {
       _shutdown_init = true;  // need to wait for button to be released
       return true;

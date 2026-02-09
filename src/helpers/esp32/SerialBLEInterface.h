@@ -79,6 +79,24 @@ public:
   bool isWriteBusy() const override;
   size_t writeFrame(const uint8_t src[], size_t len) override;
   size_t checkRecvFrame(uint8_t dest[]) override;
+
+  /**
+   * Get the BLE server instance for adding additional services
+   * @return BLEServer pointer, or NULL if not initialized
+   */
+  BLEServer* getBLEServer() { return pServer; }
+
+  /**
+   * Get the BLE service instance
+   * @return BLEService pointer, or NULL if not initialized
+   */
+  BLEService* getBLEService() { return pService; }
+
+  /**
+   * Add an additional service UUID to advertising
+   * @param uuid Service UUID to add
+   */
+  void addAdvertisingServiceUUID(const char* uuid);
 };
 
 #if BLE_DEBUG_LOGGING && ARDUINO

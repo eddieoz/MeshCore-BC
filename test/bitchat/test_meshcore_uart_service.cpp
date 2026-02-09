@@ -7,6 +7,7 @@
 #include <unity.h>
 #include "helpers/ble/SharedBLEServer.h"
 #include "helpers/ble/MeshCoreUARTService.h"
+#include "helpers/ble/BitchatBLEService.h"
 
 #ifdef NATIVE_TEST
   #include "../mocks/MockBLE.h"

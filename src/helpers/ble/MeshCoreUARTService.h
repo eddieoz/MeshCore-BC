@@ -80,6 +80,7 @@ public:
 
     // Test helpers (only in test builds)
     #ifdef NATIVE_TEST
+    bool hasReceivedData() const { return _dataReceived; }
     bool wasDataReceived() const { return _dataReceived; }
     void clearDataReceived() { _dataReceived = false; }
     #endif

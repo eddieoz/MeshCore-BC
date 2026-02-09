@@ -1,0 +1,13 @@
+{
+    "servers": {
+        "sequential-thinking": {
+            "command": "docker",
+            "args": [
+                "run",
+                "--rm",
+                "-i",
+                "mcp/sequentialthinking"
+            ]
+        }
+    }
+}

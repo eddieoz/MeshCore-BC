@@ -8,8 +8,10 @@ src_filter = [
   '+<helpers/*.cpp>',
   '+<helpers/sensors>',
   '+<helpers/radiolib/*.cpp>',
+  '+<helpers/bitchat/*.cpp>',
   '+<helpers/ui/MomentaryButton.cpp>',
   '+<helpers/ui/buzzer.cpp>',
+  '+<helpers/ble/*.cpp>',
 ]
 
 # add build and include dirs according to CPPDEFINES

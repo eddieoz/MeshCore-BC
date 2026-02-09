@@ -19,6 +19,8 @@
 #include <functional>
 #include <unordered_map>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 // Platform-specific includes
 #ifdef ESP32
@@ -28,6 +30,16 @@
   #include <BLECharacteristic.h>
 #elif defined(NRF52_PLATFORM)
   #include <bluefruit.h>
+#endif
+
+// Polyfill for std::make_unique (C++14 feature) for C++11 compatibility
+#if __cplusplus < 201402L
+namespace std {
+    template<typename T, typename... Args>
+    std::unique_ptr<T> make_unique(Args&&... args) {
+        return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+    }
+}
 #endif
 
 namespace mesh {

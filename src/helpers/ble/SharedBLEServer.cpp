@@ -201,7 +201,7 @@ public:
         Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
         
         // Add all services
-        for (const auto& [uuid, entry] : services) {
+        for (auto& [uuid, entry] : services) {
             Bluefruit.Advertising.addService(entry.platformService);
         }
         
