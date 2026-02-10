@@ -159,6 +159,11 @@ public:
   // Configuration
   void setNodeName(const char *name);
   void setPeerId(uint64_t peerId);
+  void setPublicKeys(const uint8_t *noisePubKey, const uint8_t *signingPubKey);
+
+  typedef void (*SigningCallback)(uint8_t *sig, const uint8_t *msg, size_t len, void *arg);
+  void setSigningCallback(SigningCallback cb, void *arg);
+
   const char *getNodeName() const;
   uint64_t getPeerId() const;
 
@@ -173,8 +178,20 @@ public:
   bool getPeerById(uint64_t peerId, PeerInfo &info) const;
 
   // Announcement
-  void sendAnnouncement();
+  void sendAnnouncement(uint64_t unixTimestamp = 0);
   bool wasAnnouncementSent() const;
+
+  /**
+   * @brief Synchronize the internal BitChat clock with the provided Unix timestamp
+   * @param unixTimestampMs Milliseconds since epoch
+   */
+  void syncTime(uint64_t unixTimestampMs);
+
+  /**
+   * @brief Get current Unix time in milliseconds
+   * @return uint64_t milliseconds since epoch
+   */
+  uint64_t getCurrentTimeMs() const;
 
   // Send message to BitChat clients (MeshCore → BitChat)
   bool sendMessageToClients(const char *senderName, const char *text, uint64_t timestamp);
@@ -239,6 +256,12 @@ private:
   // Configuration
   char _nodeName[32];
   uint64_t _peerId;
+  uint8_t _noisePubKey[32];
+  uint8_t _signingPubKey[32];
+  bool _hasPublicKeys;
+
+  SigningCallback _signingCallback;
+  void *_signingCallbackArg;
 
   // State
   bool _registered;
@@ -273,6 +296,10 @@ private:
   // Announcement timing
   uint32_t _lastAnnounceTime;
   bool _announcementSent;
+
+  // Clock synchronization
+  uint64_t _lastSyncTimeMs;
+  uint32_t _syncLocalMillis;
 
   // Platform handles
 #ifdef ESP32

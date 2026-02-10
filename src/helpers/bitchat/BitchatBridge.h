@@ -114,6 +114,11 @@ public:
   void onBitchatMessageReceived(const mesh::ble::BitchatMessage &msg);
 
   /**
+   * @brief Sign a BitChat message (callback from BLE service)
+   */
+  void onBitchatSignRequest(uint8_t *sig, const uint8_t *msg, size_t len);
+
+  /**
    * @brief Get statistics
    */
   uint32_t getMessagesRelayed() const { return _messagesRelayed; }
@@ -173,7 +178,7 @@ private:
   std::vector<OutgoingMessage>
       _outgoingQueue; // Using vector as simple queue to avoid <queue> header dependency if not already there
 
-  // Helper to sign BitChat messages
+  // Helpers to sign BitChat messages
   void signBitChatMessage(mesh::ble::BitchatMessage &msg);
 
   // Buffer for signing (avoid stack allocation of ~2KB)

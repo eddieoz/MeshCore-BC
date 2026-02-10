@@ -10,9 +10,60 @@
 
 #include "BitchatBridge.h"
 
+#include "BitchatIdentity.h"
+
+#include <Arduino.h>
 #include <Identity.h>
 #include <Mesh.h>
 #include <cstring>
+
+// For key conversion
+extern "C" {
+#include "../../../lib/ed25519/fe.h"
+}
+
+// Helper to compute optimal block size for padding (matching Android/iOS)
+static size_t getOptimalBlockSize(size_t dataSize) {
+  // Account for encryption overhead (~16 bytes for AES-GCM tag)
+  size_t totalSize = dataSize + 16;
+  static const size_t blockSizes[] = { 256, 512, 1024, 2048 };
+  for (size_t blockSize : blockSizes) {
+    if (totalSize <= blockSize) return blockSize;
+  }
+  return dataSize;
+}
+
+// Helper to apply PKCS#7 padding (matching Android/iOS)
+static size_t applyPKCS7Padding(uint8_t *buffer, size_t dataSize, size_t targetSize) {
+  if (dataSize >= targetSize) return dataSize;
+  size_t paddingNeeded = targetSize - dataSize;
+  if (paddingNeeded > 255) return dataSize; // PKCS#7 padding length must fit in 1 byte
+  for (size_t i = dataSize; i < targetSize; i++) {
+    buffer[i] = static_cast<uint8_t>(paddingNeeded);
+  }
+  return targetSize;
+}
+
+// Static callback for BitchatBLEService signing
+static void bridgeBitchatSigningCallback(uint8_t *sig, const uint8_t *msg, size_t len, void *arg) {
+  BitchatBridge *bridge = static_cast<BitchatBridge *>(arg);
+  if (bridge) {
+    bridge->onBitchatSignRequest(sig, msg, len);
+  }
+}
+
+// Helper to convert Ed25519 public key to Curve25519 (X25519) public key
+// Used for the Noise field in BitChat announcements
+static void ed25519_pk_to_curve25519(uint8_t *curve25519_pub, const uint8_t *ed25519_pub) {
+  fe x1, tmp0, tmp1;
+  fe_frombytes(x1, ed25519_pub);
+  fe_1(tmp1);
+  fe_add(tmp0, x1, tmp1);
+  fe_sub(tmp1, tmp1, x1);
+  fe_invert(tmp1, tmp1);
+  fe_mul(x1, tmp0, tmp1);
+  fe_tobytes(curve25519_pub, x1);
+}
 
 // ============================================================
 // Constructor / Destructor
@@ -40,8 +91,17 @@ void BitchatBridge::begin() {
   // Derive BitChat peer ID from identity
   _bitchatPeerId = derivePeerId(_identity);
 
+  // Derive Noise public key from Identity public key
+  ed25519_pk_to_curve25519(_noisePublicKey, _identity.pub_key);
+
   // Set peer ID on BLE service
   _bleService.setPeerId(_bitchatPeerId);
+  _bleService.setNodeName(_nodeName);
+
+  // Provide keys and signing callback to BLE service for announcements
+  _bleService.setPublicKeys(_noisePublicKey, _identity.pub_key);
+  _bleService.setSigningCallback(bridgeBitchatSigningCallback, this);
+
   Serial.printf("[BitChat] Peer ID set: 0x%016llX\n", _bitchatPeerId);
 
   // Register the default #mesh channel
@@ -77,6 +137,11 @@ bool BitchatBridge::initNRF52BLEService() {
     Serial.println("[BitChat] ERROR: BLE service init failed");
     return false;
   }
+
+  // Derive the SHA-256 BitChat Peer ID
+  uint64_t peerId = mesh::bitchat::deriveBitChatPeerId(_identity.pub_key);
+  _bleService.setPeerId(peerId);
+  Serial.printf("[BitChat] Derived SHA-256 Peer ID: %016llX\n", peerId);
 
   Serial.println("[BitChat] nRF52 BLE service initialized");
   return true;
@@ -130,19 +195,42 @@ void BitchatBridge::loop() {
       bMsg.version = BITCHAT_VERSION;
       bMsg.type = BITCHAT_MSG_MESSAGE;
       bMsg.ttl = 8;
-      // Convert timestamp to ms if needed
-      bMsg.timestamp = (uint64_t)msg.timestamp;
-      if (bMsg.timestamp < 1000000000000ULL) bMsg.timestamp *= 1000ULL;
+      bMsg.timestamp = getCurrentTimeMs();
+
+      // Split 64-bit print to avoid printf issues on some platforms
+      uint32_t tsHi = (uint32_t)(bMsg.timestamp >> 32);
+      uint32_t tsLo = (uint32_t)(bMsg.timestamp & 0xFFFFFFFF);
+      Serial.printf("[BitChat] Sending message with timestamp=%08lX%08lX\n", tsHi, tsLo);
 
       bMsg.setSenderId64(_bleService.getPeerId()); // Use local ID for signing
 
-      // Format payload: <Sender> Text
-      char formatted[256];
-      snprintf(formatted, sizeof(formatted), "<%s> %s", msg.sender, msg.text);
-      size_t len = strlen(formatted);
-      if (len > BITCHAT_MAX_PAYLOAD_SIZE) len = BITCHAT_MAX_PAYLOAD_SIZE;
+      // Build plain text payload for broadcast compatibility (Android app expects UTF-8 string)
+      // Format: #channel: <sender> <text>
+      // Example: #mesh: 🤖 mc/HQ2 Test1
+      // Android parsing logic:
+      //   if (startWith("#") && contains(":")) {
+      //     channel = substring(0, colon);
+      //     content = substring(colon + 1);
+      //   }
+
+      // Build plain text payload for broadcast compatibility (Android app expects UTF-8 string)
+      // Format: <sender>: <text> (Broadcast/No Channel)
+      // Example: 🤖 mc/HQ2: Test1
+      // We removed #mesh: prefix as it was causing messages to be hidden in the Android app
+      // (likely due to channel filtering logic being strict or the view being 'Global').
+
+      // OPTIMIZATION: Write directly to bMsg.payload to avoid 2KB stack allocation (Stack Overflow fix)
+      // bMsg.payload is BITCHAT_MAX_PAYLOAD_SIZE (2048) bytes
+      char *payloadPtr = (char *)bMsg.payload;
+      int len = snprintf(payloadPtr, BITCHAT_MAX_PAYLOAD_SIZE, "%s: %s", msg.sender, msg.text);
+
+      if (len < 0) len = 0;
+      if (len >= BITCHAT_MAX_PAYLOAD_SIZE) len = BITCHAT_MAX_PAYLOAD_SIZE - 1; // Truncate if needed
+
       bMsg.payloadLength = (uint16_t)len;
-      memcpy(bMsg.payload, formatted, len);
+      // No memcpy needed since we wrote directly!
+
+      Serial.printf("[BitChat] Plain text payload built: %s (len=%d)\n", payloadPtr, len);
 
       // Sign the message with local identity
       signBitChatMessage(bMsg);
@@ -172,6 +260,27 @@ void BitchatBridge::loop() {
 
   // Clear old fragment reassembly buffers (30 second timeout)
   _fragmentReassembly.clearOldFragments(now / 1000, 30);
+
+  // Story 1: Bootstrapping - Periodically send BitChat announcements
+  // Android app requires Unix timestamps to avoid "stale announcement" drop.
+  // We provide a synthetic timestamp (approx seconds since epoch) if RTC/NTP not available.
+  static uint32_t lastAnnounceTime = 0;
+  if (now - lastAnnounceTime >= 5000) {
+    lastAnnounceTime = now;
+
+    // Calculate synthetic Unix time: 1770760000 is approx Feb 10 2026 21:46 UTC (updated for testing)
+    // Adding millis()/1000 gives us a moving timestamp that is "recent enough"
+    uint64_t unixTime = 1770760000ULL + (now / 1000ULL);
+
+    Serial.printf("[BitChat] Sending announcement with timestamp: %lu (now=%lu)\n", (unsigned long)unixTime,
+                  now);
+
+    // Ensure service has latest keys
+    _bleService.setPublicKeys(_noisePublicKey, _identity.pub_key);
+
+    // Send announcement with valid timestamp
+    _bleService.sendAnnouncement(unixTime);
+  }
 }
 
 // ============================================================
@@ -348,7 +457,20 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
     size_t payloadLen = msg.payloadLength;
     if (payloadLen > 200) payloadLen = 200;
 
-    int prefixLen = sprintf((char *)&temp[5], "📱 %s: ", _nodeName);
+    // Look up sender nickname from ID
+    uint64_t senderId = msg.getSenderId64();
+    mesh::ble::PeerInfo peerInfo;
+    char senderName[33];
+
+    if (_bleService.getPeerById(senderId, peerInfo)) {
+      strncpy(senderName, peerInfo.nickname, 32);
+      senderName[32] = 0;
+    } else {
+      // Fallback if not verified/found yet
+      snprintf(senderName, sizeof(senderName), "anon%04X", (uint16_t)(senderId & 0xFFFF));
+    }
+
+    int prefixLen = sprintf((char *)&temp[5], "📱 %s: ", senderName);
     memcpy(&temp[5 + prefixLen], msg.payload, payloadLen);
     temp[5 + prefixLen + payloadLen] = 0; // null terminator
 
@@ -392,34 +514,39 @@ void BitchatBridge::signBitChatMessage(mesh::ble::BitchatMessage &msg) {
 
   _signingBuffer[offset++] = msg.version;
   _signingBuffer[offset++] = msg.type;
-  _signingBuffer[offset++] = msg.ttl;
+  _signingBuffer[offset++] = 0; // Force TTL to 0 to match Android AppConstants.SYNC_TTL_HOPS
 
   // Timestamp (Big Endian)
   for (int i = 0; i < 8; i++) {
     _signingBuffer[offset++] = (msg.timestamp >> ((7 - i) * 8)) & 0xFF;
   }
 
-  _signingBuffer[offset++] = msg.flags;
+  // Flags: Mask out HAS_SIGNATURE for signing
+  // The signature covers the packet AS IF it didn't have a signature yet
+  _signingBuffer[offset++] = (msg.flags & ~BITCHAT_FLAG_HAS_SIGNATURE);
 
   // Payload Length (Big Endian)
   _signingBuffer[offset++] = (msg.payloadLength >> 8) & 0xFF;
   _signingBuffer[offset++] = (msg.payloadLength & 0xFF);
 
-  // Sender ID (Little Endian for BitChat ID)
-  memcpy(&_signingBuffer[offset], msg.senderId, BITCHAT_SENDER_ID_SIZE);
-  offset += BITCHAT_SENDER_ID_SIZE;
-
-  if (msg.hasRecipient()) {
-    memcpy(&_signingBuffer[offset], msg.recipientId, BITCHAT_RECIPIENT_ID_SIZE);
-    offset += BITCHAT_RECIPIENT_ID_SIZE;
+  // Sender ID (big-endian for BitChat protocol compatibility)
+  for (int i = 7; i >= 0; i--) {
+    _signingBuffer[offset++] = msg.senderId[i];
   }
 
+  // CRITICAL: Aligned with iOS/Android - recipientID field (8 bytes) is ONLY present if flag is set
+  if (msg.hasRecipient()) {
+    for (int i = 7; i >= 0; i--) {
+      _signingBuffer[offset++] = msg.recipientId[i];
+    }
+  }
+
+  // Payload: starts at offset 30 (1+1+1+8+1+2+8+8)
   memcpy(&_signingBuffer[offset], msg.payload, msg.payloadLength);
   offset += msg.payloadLength;
 
-  // 3. Sign the buffer
-  // Use LocalIdentity::sign() which takes (sig, msg, len)
-  _identity.sign(msg.signature, _signingBuffer, offset);
+  // 3. Apply padding and sign
+  onBitchatSignRequest(msg.signature, _signingBuffer, offset);
 }
 
 bool BitchatBridge::isMeshChannel(const mesh::GroupChannel &channel) const {
@@ -437,20 +564,37 @@ bool BitchatBridge::isMeshChannel(const mesh::GroupChannel &channel) const {
   return match;
 }
 
-uint64_t BitchatBridge::derivePeerId(const mesh::LocalIdentity &identity) {
-  uint64_t peerId = 0;
-  for (int i = 0; i < 8; i++) {
-    peerId |= ((uint64_t)identity.pub_key[i]) << (i * 8);
+void BitchatBridge::onBitchatSignRequest(uint8_t *sig, const uint8_t *msg, size_t len) {
+  // Use a temporary buffer for padding if needed, or use the member buffer
+  // Since this is called from BLE service (announcements) OR locally (messages)
+  // we must be careful not to corrupt the input 'msg' if it's the member buffer.
+
+  size_t targetSize = getOptimalBlockSize(len);
+
+  if (targetSize > len && targetSize <= 2048) {
+    // If input is not our member buffer, we must copy it first
+    if (msg != _signingBuffer) {
+      memcpy(_signingBuffer, msg, len);
+    }
+
+    size_t paddedLen = applyPKCS7Padding(_signingBuffer, len, targetSize);
+    _identity.sign(sig, _signingBuffer, paddedLen);
+
+    Serial.printf("[BitChat] Signed PADDED message: raw=%u, padded=%u\n", (uint32_t)len, (uint32_t)paddedLen);
+  } else {
+    _identity.sign(sig, msg, len);
+    Serial.printf("[BitChat] Signed UNPADDED message: len=%u (padding skipped)\n", (uint32_t)len);
   }
-  return peerId;
+}
+
+uint64_t BitchatBridge::derivePeerId(const mesh::LocalIdentity &identity) {
+  return mesh::bitchat::deriveBitChatPeerId(identity.pub_key);
 }
 
 uint64_t BitchatBridge::getCurrentTimeMs() const {
-  uint64_t localTime = millis();
-  if (_timeSynced) {
-    return localTime + _timeOffset;
-  }
-  return localTime;
+  // BitchatBLEService is a member object, not a pointer.
+  // It provides synchronized 64-bit time.
+  return _bleService.getCurrentTimeMs();
 }
 
 mesh::GroupChannel *BitchatBridge::getMeshChannel() {

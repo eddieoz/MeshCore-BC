@@ -16,21 +16,34 @@
 #endif // This #endif closes the #ifdef ESP32 / #elif defined(NRF52_PLATFORM) block
 #endif // This #endif closes the #ifdef NATIVE_TEST block
 
-// Helper for time - must be defined before use
-static uint32_t getCurrentTimeMs() {
-#ifdef NATIVE_TEST
-  // Use simple counter for native tests
-  static uint32_t counter = 0;
-  return counter += 100;
-#else
-  return millis();
-#endif
-}
+// Helper for time now handled in BitchatBLEService member functions
 
 namespace mesh {
 namespace ble {
 
 // Static instance pointer for nRF52 callback routing
+// Helper to compute optimal block size for padding (matching Android/iOS/BitchatBridge)
+static size_t getOptimalBlockSize(size_t dataSize) {
+  // Account for encryption overhead (~16 bytes for AES-GCM tag)
+  size_t totalSize = dataSize + 16;
+  static const size_t blockSizes[] = { 256, 512, 1024, 2048 };
+  for (size_t blockSize : blockSizes) {
+    if (totalSize <= blockSize) return blockSize;
+  }
+  return dataSize;
+}
+
+// Helper to apply PKCS#7 padding (matching Android/iOS/BitchatBridge)
+static size_t applyPKCS7Padding(uint8_t *buffer, size_t dataSize, size_t targetSize) {
+  if (targetSize <= dataSize) return dataSize;
+  size_t paddingNeeded = targetSize - dataSize;
+  if (paddingNeeded > 255) return dataSize; // PKCS#7 padding length must fit in 1 byte
+  for (size_t i = dataSize; i < targetSize; i++) {
+    buffer[i] = static_cast<uint8_t>(paddingNeeded);
+  }
+  return targetSize;
+}
+
 BitchatBLEService *BitchatBLEService::_instance = nullptr;
 
 // Static lock to prevent BLE receive callback during send operations
@@ -54,7 +67,8 @@ void BitchatBLEService::onDisconnect(uint16_t conn_handle, uint8_t reason) {
 BitchatBLEService::BitchatBLEService()
     : _peerId(0), _registered(false), _lastAnnounceTime(0), _announcementSent(false), _writeBufferOffset(0),
       _pendingData(false), _lastWriteTime(0), _bitchatClientCount(0), _clientSubscribed(false),
-      _hasPendingOutgoing(false), _connectionTime(0)
+      _hasPendingOutgoing(false), _connectionTime(0), _hasPublicKeys(false), _signingCallback(nullptr),
+      _signingCallbackArg(nullptr), _lastSyncTimeMs(1770760000000ULL), _syncLocalMillis(millis())
 #ifdef ESP32
       ,
       _platformService(nullptr), _characteristic(nullptr)
@@ -79,6 +93,9 @@ BitchatBLEService::BitchatBLEService()
 #ifdef NRF52_PLATFORM
   _instance = this;
 #endif
+
+  memset(_noisePubKey, 0, sizeof(_noisePubKey));
+  memset(_signingPubKey, 0, sizeof(_signingPubKey));
 }
 
 BitchatBLEService::~BitchatBLEService() {
@@ -102,6 +119,21 @@ const char *BitchatBLEService::getNodeName() const {
 
 uint64_t BitchatBLEService::getPeerId() const {
   return _peerId;
+}
+
+void BitchatBLEService::setPublicKeys(const uint8_t *noisePubKey, const uint8_t *signingPubKey) {
+  if (noisePubKey) {
+    memcpy(_noisePubKey, noisePubKey, 32);
+  }
+  if (signingPubKey) {
+    memcpy(_signingPubKey, signingPubKey, 32);
+  }
+  _hasPublicKeys = true;
+}
+
+void BitchatBLEService::setSigningCallback(SigningCallback cb, void *arg) {
+  _signingCallback = cb;
+  _signingCallbackArg = arg;
 }
 
 // Message handling
@@ -153,18 +185,21 @@ bool BitchatBLEService::getPeerById(uint64_t peerId, PeerInfo &info) const {
 
 // Announcement
 
-void BitchatBLEService::sendAnnouncement() {
+void BitchatBLEService::sendAnnouncement(uint64_t unixTimestamp) {
   if (_connections.empty()) {
     return;
   }
 
   // Build ANNOUNCE message
-  // Use member variable to avoid stack overflow
   memset(&_tempTxMessage, 0, sizeof(BitchatMessage));
   BitchatMessage &msg = _tempTxMessage;
 
+  msg.version = BITCHAT_VERSION;
   msg.type = BITCHAT_MSG_ANNOUNCE;
   msg.ttl = 8;
+  // BitChat protocol uses milliseconds since epoch
+  // If unixTimestamp is provided, use it (assumed seconds, so * 1000)
+  msg.timestamp = (unixTimestamp > 0) ? (unixTimestamp * 1000ULL) : getCurrentTimeMs();
   msg.setSenderId64(_peerId);
   msg.flags = 0;
 
@@ -180,13 +215,78 @@ void BitchatBLEService::sendAnnouncement() {
     offset += nickLen;
   }
 
+  // Noise Public Key TLV (type=0x02) - Required for Android verification
+  if (_hasPublicKeys && offset + 2 + 32 < BITCHAT_MAX_PAYLOAD_SIZE) {
+    msg.payload[offset++] = 0x02; // TLV type
+    msg.payload[offset++] = 32;   // length
+    memcpy(&msg.payload[offset], _noisePubKey, 32);
+    offset += 32;
+  }
+
+  // Signing Public Key TLV (type=0x03) - Required for Android verification
+  if (_hasPublicKeys && offset + 2 + 32 < BITCHAT_MAX_PAYLOAD_SIZE) {
+    msg.payload[offset++] = 0x03; // TLV type
+    msg.payload[offset++] = 32;   // length
+    memcpy(&msg.payload[offset], _signingPubKey, 32);
+    offset += 32;
+  }
+
   msg.payloadLength = static_cast<uint16_t>(offset);
 
+  // Sign if callback provided
+  if (_signingCallback) {
+    msg.flags |= BITCHAT_FLAG_HAS_SIGNATURE;
+
+    // Serialize message for signing
+    // CRITICAL: Must use the same logic as BitchatBridge::signBitChatMessage
+    // to match Android AppConstants.SYNC_TTL_HOPS (0) and clear HAS_SIGNATURE flag
+    uint8_t signBuffer[1024]; // Safe size for announcement
+    size_t signOffset = 0;
+
+    signBuffer[signOffset++] = msg.version;
+    signBuffer[signOffset++] = msg.type;
+    signBuffer[signOffset++] = 0; // Force TTL to 0 to match Android AppConstants.SYNC_TTL_HOPS
+
+    for (int i = 7; i >= 0; i--) {
+      signBuffer[signOffset++] = static_cast<uint8_t>((msg.timestamp >> (i * 8)) & 0xFF);
+    }
+
+    // Mask out HAS_SIGNATURE for signing
+    signBuffer[signOffset++] = (msg.flags & ~BITCHAT_FLAG_HAS_SIGNATURE);
+    signBuffer[signOffset++] = static_cast<uint8_t>((msg.payloadLength >> 8) & 0xFF);
+    signBuffer[signOffset++] = static_cast<uint8_t>(msg.payloadLength & 0xFF);
+
+    // Sender ID (big-endian for BitChat protocol compatibility)
+    for (int i = 7; i >= 0; i--) {
+      signBuffer[signOffset++] = msg.senderId[i];
+    }
+
+    // CRITICAL: Aligned with iOS/Android - recipientID field (8 bytes) is ONLY present if flag is set
+    // For announcements (broadcast), it is usually NOT present.
+    if (msg.hasRecipient()) {
+      for (int i = 7; i >= 0; i--) {
+        signBuffer[signOffset++] = msg.recipientId[i];
+      }
+    }
+
+    memcpy(&signBuffer[signOffset], msg.payload, msg.payloadLength);
+    signOffset += msg.payloadLength;
+
+    // Apply signature
+    _signingCallback(msg.signature, signBuffer, signOffset, _signingCallbackArg);
+  }
+
   // Serialize and send
-  uint8_t buffer[512];
-  size_t len = serializeMessage(msg, buffer, sizeof(buffer));
+  size_t len = serializeMessage(msg, _tempTxBuffer, sizeof(_tempTxBuffer));
   if (len > 0) {
-    broadcastNotification(buffer, len);
+    // CRITICAL: Apply PKCS#7 padding to the WIRE packet
+    // This matches applyPKCS7Padding usage in sendPendingOutgoing()
+    size_t targetSize = getOptimalBlockSize(len);
+    if (targetSize > len && targetSize <= sizeof(_tempTxBuffer)) {
+      len = applyPKCS7Padding(_tempTxBuffer, len, targetSize);
+    }
+
+    broadcastNotification(_tempTxBuffer, len);
     _announcementSent = true;
   }
 
@@ -271,6 +371,13 @@ bool BitchatBLEService::sendBitchatMessage(const BitchatMessage &msg) {
   if (len == 0) {
     Serial.println("[BitChat BLE] Error: Failed to serialize message");
     return false;
+  }
+
+  // CRITICAL: Apply PKCS#7 padding to the WIRE packet
+  // This ensures consistency with sendAnnouncement and sendPendingOutgoing
+  size_t targetSize = getOptimalBlockSize(len);
+  if (targetSize > len && targetSize <= sizeof(_tempTxBuffer)) {
+    len = applyPKCS7Padding(_tempTxBuffer, len, targetSize);
   }
 
   Serial.printf("[BitChat BLE] Broadcasting message type=%d, len=%d\n", msg.type, len);
@@ -522,10 +629,13 @@ void BitchatBLEService::loop() {
     sendPendingOutgoing();
   }
 
-  // Send periodic announcements
+  // Periodic announcements are now driven by BitchatBridge::loop() to provide
+  // accurate or synthetic Unix timestamps required by the Android app.
+  /*
   if (now - _lastAnnounceTime >= ANNOUNCE_INTERVAL_MS) {
     sendAnnouncement();
   }
+  */
 }
 
 #ifdef NRF52_PLATFORM
@@ -673,6 +783,22 @@ void BitchatBLEService::parseAndQueueMessage(const uint8_t *data, size_t len) {
   }
 }
 
+uint64_t BitchatBLEService::getCurrentTimeMs() const {
+#ifdef NATIVE_TEST
+  // Use simple counter for native tests
+  static uint32_t counter = 0;
+  return counter += 100;
+#else
+  return _lastSyncTimeMs + (millis() - _syncLocalMillis);
+#endif
+}
+
+void BitchatBLEService::syncTime(uint64_t unixTimestampMs) {
+  _lastSyncTimeMs = unixTimestampMs;
+  _syncLocalMillis = millis();
+  Serial.printf("[BitChat BLE] Clock synchronized to %llu\n", unixTimestampMs);
+}
+
 void BitchatBLEService::processAnnounce(const BitchatMessage &msg) {
   Serial.println("[ANNOUNCE_DEBUG] processAnnounce: entry");
 
@@ -682,6 +808,12 @@ void BitchatBLEService::processAnnounce(const BitchatMessage &msg) {
   Serial.println("[ANNOUNCE_DEBUG] processAnnounce: calling parseAnnounceTLV");
   if (parseAnnounceTLV(msg.payload, msg.payloadLength, nickname, sizeof(nickname), pubKey)) {
     Serial.printf("[ANNOUNCE_DEBUG] processAnnounce: parseAnnounceTLV success, nickname=%s\n", nickname);
+
+    // Sync clock from announcer if timestamp looks valid (BitChat app sends current Unix time)
+    if (msg.timestamp > 1700000000000ULL) {
+      syncTime(msg.timestamp);
+    }
+
     Serial.println("[ANNOUNCE_DEBUG] processAnnounce: calling cachePeer");
     cachePeer(msg.getSenderId64(), nickname, pubKey);
     Serial.println("[ANNOUNCE_DEBUG] processAnnounce: cachePeer returned");
@@ -758,6 +890,11 @@ void BitchatBLEService::sendPendingOutgoing() {
   size_t len = serializeMessage(_pendingOutgoing, _tempTxBuffer, sizeof(_tempTxBuffer));
 
   if (len > 0) {
+    // CRITICAL: Apply PKCS#7 padding for consistency with iOS/Android
+    size_t targetSize = getOptimalBlockSize(len);
+    if (targetSize > len && targetSize <= sizeof(_tempTxBuffer)) {
+      len = applyPKCS7Padding(_tempTxBuffer, len, targetSize);
+    }
     broadcastNotification(_tempTxBuffer, len);
   }
 }
@@ -783,14 +920,18 @@ size_t BitchatBLEService::serializeMessage(const BitchatMessage &msg, uint8_t *b
   buffer[offset++] = static_cast<uint8_t>((msg.payloadLength >> 8) & 0xFF);
   buffer[offset++] = static_cast<uint8_t>(msg.payloadLength & 0xFF);
 
-  // Sender ID
-  memcpy(&buffer[offset], msg.senderId, BITCHAT_SENDER_ID_SIZE);
-  offset += BITCHAT_SENDER_ID_SIZE;
+  // Sender ID (big-endian for BitChat protocol compatibility with iOS/Android)
+  // iOS/Android use big-endian (MSB first), so we need to reverse the byte order
+  // from the internal little-endian representation
+  for (int i = 7; i >= 0; i--) {
+    buffer[offset++] = msg.senderId[i];
+  }
 
-  // Recipient ID (if present)
+  // Recipient ID (big-endian for BitChat protocol compatibility with iOS/Android)
   if (msg.hasRecipient()) {
-    memcpy(&buffer[offset], msg.recipientId, BITCHAT_RECIPIENT_ID_SIZE);
-    offset += BITCHAT_RECIPIENT_ID_SIZE;
+    for (int i = 7; i >= 0; i--) {
+      buffer[offset++] = msg.recipientId[i];
+    }
   }
 
   // Payload
@@ -834,16 +975,22 @@ bool BitchatBLEService::parseMessage(const uint8_t *data, size_t len, BitchatMes
   msg.payloadLength = (static_cast<uint16_t>(data[offset]) << 8) | data[offset + 1];
   offset += 2;
 
-  // Sender ID
-  memcpy(msg.senderId, &data[offset], BITCHAT_SENDER_ID_SIZE);
+  // Sender ID (big-endian for BitChat protocol compatibility with iOS/Android)
+  // iOS/Android send big-endian (MSB first), so we need to reverse the byte order
+  // to the internal little-endian representation
+  for (int i = 0; i < 8; i++) {
+    msg.senderId[7 - i] = data[offset + i];
+  }
   offset += BITCHAT_SENDER_ID_SIZE;
 
-  // Recipient ID (if present)
+  // Recipient ID (big-endian for BitChat protocol compatibility with iOS/Android)
   if (msg.hasRecipient()) {
     if (offset + BITCHAT_RECIPIENT_ID_SIZE > len) {
       return false;
     }
-    memcpy(msg.recipientId, &data[offset], BITCHAT_RECIPIENT_ID_SIZE);
+    for (int i = 0; i < 8; i++) {
+      msg.recipientId[7 - i] = data[offset + i];
+    }
     offset += BITCHAT_RECIPIENT_ID_SIZE;
   }
 
