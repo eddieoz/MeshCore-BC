@@ -90,15 +90,11 @@ BitchatBridge::~BitchatBridge() {}
 // ============================================================
 
 void BitchatBridge::begin() {
-  Serial.println("[BitChat] begin() ENTRY");
-  
   if (_initialized) {
-    Serial.println("[BitChat] Already initialized, returning");
     return;
   }
 
   // Story 1: Compute #mesh secret for privacy filtering
-  Serial.println("[BitChat] Calling computeMeshSecret()...");
   computeMeshSecret();
 
   // Derive BitChat peer ID from identity
@@ -114,8 +110,6 @@ void BitchatBridge::begin() {
   // Provide keys and signing callback to BLE service for announcements
   _bleService.setPublicKeys(_noisePublicKey, _identity.pub_key);
   _bleService.setSigningCallback(bridgeBitchatSigningCallback, this);
-
-  Serial.printf("[BitChat] Peer ID set: 0x%016llX\n", _bitchatPeerId);
 
   // Register the default #mesh channel
   _channelRegistry.registerDefaultMeshChannel();
@@ -143,20 +137,14 @@ bool BitchatBridge::initNRF52BLEService() {
   // nRF52 BitChat service initialization
   // This assumes Bluefruit has already been initialized by SerialBLEInterface
 
-  Serial.println("[BitChat] initNRF52BLEService() called");
-
   // Initialize the BLE service
   if (!_bleService.initNRF52(_nodeName)) {
-    Serial.println("[BitChat] ERROR: BLE service init failed");
     return false;
   }
 
   // Derive the SHA-256 BitChat Peer ID
   uint64_t peerId = mesh::bitchat::deriveBitChatPeerId(_identity.pub_key);
   _bleService.setPeerId(peerId);
-  Serial.printf("[BitChat] Derived SHA-256 Peer ID: %016llX\n", peerId);
-
-  Serial.println("[BitChat] nRF52 BLE service initialized");
   return true;
 }
 #endif
@@ -166,18 +154,7 @@ bool BitchatBridge::initNRF52BLEService() {
 // ============================================================
 
 void BitchatBridge::loop() {
-  static uint32_t lastDebug = 0;
   uint32_t now = millis();
-
-  // Print debug every 10 seconds
-  if (now - lastDebug > 10000) {
-    lastDebug = now;
-    if (_initialized) {
-      Serial.printf("[BitChat] Bridge alive, relayed=%lu, dropped=%lu, queue=%u\n", _messagesRelayed,
-                    _duplicatesDropped,
-                    _bleService.hasReceivedMessages() ? _bleService.getMessageQueueSize() : 0);
-    }
-  }
 
   if (!_initialized) {
     return;
@@ -197,8 +174,6 @@ void BitchatBridge::loop() {
     OutgoingMessage msg = _outgoingQueue.front();
     _outgoingQueue.erase(_outgoingQueue.begin());
 
-    Serial.printf("[BitChat] Processing queued message from %s\n", msg.sender);
-
     // Check clients before attempting send
     if (_bleService.hasConnectedClients()) {
       // Use member variable to avoid stack overflow
@@ -211,20 +186,7 @@ void BitchatBridge::loop() {
       // Dynamic Time Sync: use bleService time which is now synced from both Messages and Announcements
       uint64_t baseTime = getCurrentTimeMs();
 
-      // Check for valid time (if > 2024 it's likely synced or at least using the updated fallback)
-      if (baseTime > 1700000000000ULL) {
-        Serial.printf("[BitChat] Using time: %llu\n", baseTime);
-      } else {
-        // Should not happen as BitchatBLEService has a fallback, but just in case
-        Serial.printf("[BitChat] Warning: Time seems invalid: %llu\n", baseTime);
-      }
-
       bMsg.timestamp = baseTime;
-
-      // Split 64-bit print to avoid printf issues on some platforms
-      uint32_t tsHi = (uint32_t)(bMsg.timestamp >> 32);
-      uint32_t tsLo = (uint32_t)(bMsg.timestamp & 0xFFFFFFFF);
-      Serial.printf("[BitChat] Sending message with timestamp=%08lX%08lX\n", tsHi, tsLo);
 
       bMsg.setSenderId64(_bleService.getPeerId()); // Use local ID for signing
 
@@ -254,19 +216,12 @@ void BitchatBridge::loop() {
       bMsg.payloadLength = (uint16_t)len;
       // No memcpy needed since we wrote directly!
 
-      Serial.printf("[BitChat] Plain text payload built: %s (len=%d)\n", payloadPtr, len);
-
       // Sign the message with local identity
       signBitChatMessage(bMsg);
 
       if (_bleService.sendBitchatMessage(bMsg)) {
-        Serial.println("[BitChat] Signed message sent to BitChat app via loop");
         _messagesRelayed++;
-      } else {
-        Serial.println("[BitChat] Failed to send queued message");
       }
-    } else {
-      Serial.println("[BitChat] Message processed but no clients connected");
     }
   }
 
@@ -274,7 +229,6 @@ void BitchatBridge::loop() {
   // Use member variable to avoid 2KB+ stack allocation that can cause stack overflow
   while (_bleService.hasReceivedMessages()) {
     if (_bleService.getNextMessage(_tempLoopMessage)) {
-      Serial.printf("[BitChat] Processing message from BLE queue, type=%d\n", _tempLoopMessage.type);
       onBitchatMessageReceived(_tempLoopMessage);
     }
   }
@@ -296,9 +250,6 @@ void BitchatBridge::loop() {
     // getCurrentTimeMs() returns milliseconds; sendAnnouncement expects seconds
     uint64_t currentMs = getCurrentTimeMs();
     uint64_t unixTime = currentMs / 1000ULL;
-
-    Serial.printf("[BitChat] Sending announcement with timestamp: %lu (synced_ms=%llu)\n",
-                  (unsigned long)unixTime, currentMs);
 
     // Ensure service has latest keys
     _bleService.setPublicKeys(_noisePublicKey, _identity.pub_key);
@@ -328,32 +279,24 @@ bool BitchatBridge::hasBitchatClient() const {
 
 void BitchatBridge::onMeshcoreGroupMessage(const mesh::GroupChannel &channel, uint32_t timestamp,
                                            const char *senderName, const char *text) {
-  Serial.println("[BitChat] onMeshcoreGroupMessage() called");
-
   if (!_initialized) {
-    Serial.println("[BitChat] Bridge not initialized, ignoring");
     return;
   }
   if (!text) {
-    Serial.println("[BitChat] Null text, ignoring");
     return;
   }
   if (_processingMessage) {
-    Serial.println("[BitChat] Already processing, ignoring");
     return;
   }
 
   _processingMessage = true;
-  Serial.printf("[BitChat] Processing message from %s: %s\n", senderName ? senderName : "null", text);
 
   // Story 3: PRIVACY FIX - Only forward messages from #mesh hashtag channel
   if (!isMeshChannel(channel)) {
-    Serial.println("[BitChat] Ignoring: Not from #mesh channel (privacy protection)");
     _privacyDrops++;
     _processingMessage = false;
     return;
   }
-  Serial.println("[BitChat] Verified: Message from #mesh channel");
 
   // Cache the channel for outgoing messages
   // IMPORTANT: Only copy hash[0], don't overwrite our secret!
@@ -397,9 +340,6 @@ void BitchatBridge::onMeshcoreGroupMessage(const mesh::GroupChannel &channel, ui
     msg.timestamp = timestamp;
 
     _outgoingQueue.push_back(msg);
-    Serial.println("[BitChat] Queued message for main loop processing");
-  } else {
-    Serial.println("[BitChat] Outgoing queue full, dropping message");
   }
 
   _processingMessage = false;
@@ -414,7 +354,6 @@ void BitchatBridge::onMeshcoreEncapsulatedMessage(const mesh::GroupChannel &chan
   // Build EncapsulatedPacket from raw data
   mesh::bitchat::EncapsulatedPacket packet;
   if (len > sizeof(packet.data)) {
-    Serial.printf("[BitChat] Packet too large for buffer: %d > %d\n", len, sizeof(packet.data));
     return;
   }
 
@@ -429,23 +368,12 @@ void BitchatBridge::onMeshcoreEncapsulatedMessage(const mesh::GroupChannel &chan
 
   if (_decapsulator.decapsulate(packet, channel.secret, result)) {
     if (result.status == mesh::bitchat::DecapsulationStatus::SUCCESS) {
-      if (result.isFragment) {
-        Serial.println("[BitChat] Received fragment, reassembly not yet fully implemented");
-      } else {
-        Serial.printf("[BitChat] Decapsulated message type=%d from %016llX, forwarding to app\n",
-                      result.message.type, result.message.getSenderId64());
-
+      if (!result.isFragment) {
         if (_bleService.sendBitchatMessage(result.message)) {
           _messagesRelayed++;
-        } else {
-          Serial.println("[BitChat] Failed to forward to app (BLE tx failed)");
         }
       }
-    } else {
-      Serial.printf("[BitChat] Decapsulation failed: status=%d\n", (int)result.status);
     }
-  } else {
-    Serial.println("[BitChat] Failed to decapsulate packet");
   }
 }
 
@@ -454,15 +382,11 @@ void BitchatBridge::onMeshcoreEncapsulatedMessage(const mesh::GroupChannel &chan
 // ============================================================
 
 void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &msg) {
-  Serial.println("[BitChat] onBitchatMessageReceived() ENTRY");
-  
   if (!_initialized) {
-    Serial.println("[BitChat] ERROR: Bridge not initialized!");
     return;
   }
   
   if (_processingMessage) {
-    Serial.println("[BitChat] ERROR: Already processing message!");
     return;
   }
 
@@ -472,42 +396,10 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
   // which updates its internal clock via syncTime()
 
   // Handle different message types
-  Serial.printf("[BitChat] onBitchatMessageReceived: type=%d, payloadLen=%d, _hasMeshChannel=%d\n", 
-                msg.type, msg.payloadLength, _hasMeshChannel ? 1 : 0);
-
-  // DEBUG: Check if secret is still valid
-  if (_hasMeshChannel) {
-    Serial.print("[BitChat] DEBUG _meshChannel.secret: ");
-    for (int i = 0; i < 16; i++) {
-      Serial.printf("%02X", _meshChannel.secret[i]);
-    }
-    Serial.println();
-    
-    // Verify against expected
-    if (_meshChannel.secret[0] != 0x5B) {
-      Serial.printf("[BitChat] WARNING: Secret corrupted! Expected 0x5B, got 0x%02X\n", _meshChannel.secret[0]);
-      // Re-initialize
-      initMeshChannel();
-    }
-  }
-
-  // DEBUG: Check secret before processing
-  if (_hasMeshChannel && _meshChannel.secret[0] != 0x5B) {
-    Serial.printf("[BitChat] DEBUG: Secret corrupted before switch! first_byte=0x%02X\n", _meshChannel.secret[0]);
-  }
-
   switch (msg.type) {
   case 0x02: { // MESSAGE
-    // DEBUG: Check secret at case entry
-    if (_meshChannel.secret[0] != 0x5B) {
-      Serial.printf("[BitChat] DEBUG: Secret corrupted at case 0x02 entry! first_byte=0x%02X\n", _meshChannel.secret[0]);
-    }
-    
     // Check if we have a cached mesh channel
     if (!_hasMeshChannel) {
-      Serial.println("[BitChat] ERROR: No mesh channel cached yet!");
-      Serial.println("[BitChat] Call initMeshChannel() first or switch to BitChat mode");
-      Serial.printf("[BitChat] _hasMeshSecret=%d, _initialized=%d\n", _hasMeshSecret ? 1 : 0, _initialized ? 1 : 0);
       _processingMessage = false;
       return;
     }
@@ -547,24 +439,12 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
 
     size_t totalLen = 5 + prefixLen + payloadLen + 1; // include null
 
-    Serial.printf("[BitChat] Sending GRP_TXT to mesh, len=%d\n", totalLen);
-    Serial.print("[BitChat] Full 32-byte secret: ");
-    for (int i = 0; i < 32; i++) Serial.printf("%02X", _meshChannel.secret[i]);
-    Serial.println();
-    Serial.printf("[BitChat] Channel secret first byte: 0x%02X, hash first byte: 0x%02X\n",
-                  _meshChannel.secret[0], _meshChannel.hash[0]);
-
     // Create and send as standard group text message
     auto *pkt = _mesh.createGroupDatagram(0x05, // PAYLOAD_TYPE_GRP_TXT
                                           _meshChannel, temp, totalLen);
     if (pkt) {
-      Serial.printf("[BitChat] Packet created, payload_len=%d, path_len=%d\n", 
-                    pkt->payload_len, pkt->path_len);
       _mesh.sendFlood(pkt);
       _messagesRelayed++;
-      Serial.println("[BitChat] Message sent to mesh as GRP_TXT!");
-    } else {
-      Serial.println("[BitChat] ERROR: Failed to create packet!");
     }
     break;
   }
@@ -631,8 +511,6 @@ void BitchatBridge::signBitChatMessage(mesh::ble::BitchatMessage &msg) {
 // First 16 bytes of SHA256("#mesh") = 5b664cde0b08b220612113db980650f3
 // Hardcoded to avoid memory corruption issues during SHA256 computation
 void BitchatBridge::computeMeshSecret() {
-  Serial.println("[BitChat] computeMeshSecret() ENTRY (hardcoded)");
-  
   // Hardcoded secret for #mesh channel (first 16 bytes of SHA256("#mesh"))
   const uint8_t MESH_SECRET[16] = {
     0x5B, 0x66, 0x4C, 0xDE, 0x0B, 0x08, 0xB2, 0x20,
@@ -641,13 +519,6 @@ void BitchatBridge::computeMeshSecret() {
   
   memcpy(_meshChannelSecret, MESH_SECRET, 16);
   _hasMeshSecret = true;
-
-  // Debug: print full 16-byte secret
-  Serial.print("[BitChat] #mesh secret (hardcoded): ");
-  for (int i = 0; i < 16; i++) {
-    Serial.printf("%02X", _meshChannelSecret[i]);
-  }
-  Serial.println();
 }
 
 // Compute channel hash from secret (SHA256 of secret, for routing)
@@ -658,56 +529,25 @@ void BitchatBridge::computeChannelHash(uint8_t *hash, const uint8_t *secret, siz
 // Initialize the #mesh channel for sending messages
 // Call this when switching to BitChat mode
 bool BitchatBridge::initMeshChannel() {
-  Serial.println("[BitChat] initMeshChannel() called");
-  
   if (!_hasMeshSecret) {
-    Serial.println("[BitChat] ERROR: Cannot init mesh channel - secret not computed");
     return false;
   }
   if (_hasMeshChannel) {
-    Serial.println("[BitChat] Mesh channel already initialized");
     return true;
   }
 
   // Initialize the channel structure
   memset(&_meshChannel, 0, sizeof(_meshChannel));
   
-  // Debug: Check source before copy
-  Serial.print("[BitChat] initMeshChannel: source secret: ");
-  for (int i = 0; i < 16; i++) Serial.printf("%02X", _meshChannelSecret[i]);
-  Serial.println();
-  
   // Copy the secret (16 bytes) - note: GroupChannel.secret is 32 bytes (PUB_KEY_SIZE)
   // but MeshCore hashtag channels use first 16 bytes of SHA256 as the secret
   memcpy(_meshChannel.secret, _meshChannelSecret, 16);
-  
-  // Debug: Check destination immediately after copy
-  Serial.print("[BitChat] initMeshChannel: after memcpy, secret: ");
-  for (int i = 0; i < 32; i++) Serial.printf("%02X", _meshChannel.secret[i]);
-  Serial.println();
   
   // Hardcoded channel hash (first byte only - PATH_HASH_SIZE = 1)
   // MeshCore only uses the first byte of hash for routing
   _meshChannel.hash[0] = 0xB0;  // First byte of SHA256(secret)
   
-  Serial.printf("[BitChat] Hash (hardcoded): 0x%02X\n", _meshChannel.hash[0]);
-  
   _hasMeshChannel = true;
-  
-  Serial.println("[BitChat] #mesh channel initialized for sending");
-  Serial.print("[BitChat] Channel secret (source): ");
-  for (int i = 0; i < 16; i++) {
-    Serial.printf("%02X", _meshChannelSecret[i]);
-  }
-  Serial.println();
-  Serial.print("[BitChat] Channel secret (in struct, 32 bytes): ");
-  for (int i = 0; i < 32; i++) {
-    Serial.printf("%02X", _meshChannel.secret[i]);
-  }
-  Serial.println();
-  Serial.print("[BitChat] Channel hash (first byte): 0x");
-  Serial.printf("%02X", _meshChannel.hash[0]);
-  Serial.println();
   
   return true;
 }
@@ -715,27 +555,12 @@ bool BitchatBridge::initMeshChannel() {
 // Story 2: Verify channel is #mesh by comparing secrets
 bool BitchatBridge::isMeshChannel(const mesh::GroupChannel &channel) const {
   if (!_hasMeshSecret) {
-    Serial.println("[BitChat] isMeshChannel: no mesh secret available");
     return false;
   }
 
   // Compare first 16 bytes for hashtag channel match
   // Per MeshCore spec, hashtag secrets are first 16 bytes of SHA256("#channelname")
-  bool match = (memcmp(channel.secret, _meshChannelSecret, 16) == 0);
-
-  if (match) {
-    Serial.println("[BitChat] Channel verified: #mesh");
-  } else {
-    // Debug: show first 16 bytes for troubleshooting
-    Serial.println("[BitChat] Channel mismatch:");
-    Serial.print("  received=");
-    for (int i = 0; i < 16; i++) Serial.printf("%02X", channel.secret[i]);
-    Serial.print("\n  expected =");
-    for (int i = 0; i < 16; i++) Serial.printf("%02X", _meshChannelSecret[i]);
-    Serial.println();
-  }
-
-  return match;
+  return (memcmp(channel.secret, _meshChannelSecret, 16) == 0);
 }
 
 void BitchatBridge::onBitchatSignRequest(uint8_t *sig, const uint8_t *msg, size_t len) {
@@ -754,10 +579,8 @@ void BitchatBridge::onBitchatSignRequest(uint8_t *sig, const uint8_t *msg, size_
     size_t paddedLen = applyPKCS7Padding(_signingBuffer, len, targetSize);
     _identity.sign(sig, _signingBuffer, paddedLen);
 
-    Serial.printf("[BitChat] Signed PADDED message: raw=%u, padded=%u\n", (uint32_t)len, (uint32_t)paddedLen);
   } else {
     _identity.sign(sig, msg, len);
-    Serial.printf("[BitChat] Signed UNPADDED message: len=%u (padding skipped)\n", (uint32_t)len);
   }
 }
 
