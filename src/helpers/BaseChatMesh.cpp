@@ -801,6 +801,20 @@ ChannelDetails* BaseChatMesh::addChannel(const char* name, const char* psk_base6
   }
   return NULL;
 }
+
+ChannelDetails* BaseChatMesh::addHashtagChannel(const char* name, const uint8_t* secret, uint8_t secret_len) {
+  if (num_channels < MAX_GROUP_CHANNELS && secret_len <= 32) {
+    auto dest = &channels[num_channels];
+
+    memset(dest->channel.secret, 0, sizeof(dest->channel.secret));
+    memcpy(dest->channel.secret, secret, secret_len);
+    mesh::Utils::sha256(dest->channel.hash, sizeof(dest->channel.hash), dest->channel.secret, secret_len);
+    StrHelper::strncpy(dest->name, name, sizeof(dest->name));
+    num_channels++;
+    return dest;
+  }
+  return NULL;
+}
 bool BaseChatMesh::getChannel(int idx, ChannelDetails& dest) {
   if (idx >= 0 && idx < MAX_GROUP_CHANNELS) {
     dest = channels[idx];

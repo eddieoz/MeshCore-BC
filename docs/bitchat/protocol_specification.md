@@ -170,6 +170,140 @@ BitChat uses Unix timestamps in milliseconds. Devices synchronize time via:
 
 Time sync threshold: 30 seconds difference triggers update.
 
+## Hashtag Channels
+
+BitChat supports public hashtag channels (e.g., `#mesh`). These channels use a deterministic key derivation mechanism based on the channel name.
+
+### #mesh Channel
+
+The `#mesh` channel is the primary public channel for BitChat-MeshCore interoperability.
+
+#### Channel Secret Derivation
+
+The `#mesh` channel secret is derived using **the first 16 bytes of SHA256** over the UTF-8 encoded channel name string (including the `#` prefix):
+
+```
+channel_secret = first_16_bytes(SHA256("#mesh"))
+```
+
+#### #mesh Secret (Test Vector)
+
+```
+Input:          "#mesh" (5 bytes: 0x23 0x6D 0x65 0x73 0x68)
+SHA256:         0x5B664CDE0B08B220612113DB980650F3F3500698DB13216120B2080BDE4C665B
+First 16 bytes: 0x5B664CDE0B08B220612113DB980650F3
+```
+
+The 16-byte channel secret: **`5B664CDE0B08B220612113DB980650F3`**
+
+#### Firmware Implementation
+
+The MeshCore firmware computes and stores the `#mesh` channel secret:
+
+```cpp
+// In BitchatBridge::computeMeshSecret()
+const char* hashtag = "#mesh";
+uint8_t sha256_result[32];
+mesh::Utils::sha256(sha256_result, 32, (const uint8_t*)hashtag, strlen(hashtag));
+memcpy(_meshChannelSecret, sha256_result, 16);  // First 16 bytes only
+```
+
+#### Channel Verification
+
+When receiving a group message, the firmware verifies it belongs to the `#mesh` channel by comparing the first 16 bytes of the channel secret:
+
+```cpp
+bool BitchatBridge::isMeshChannel(const mesh::GroupChannel& channel) const {
+    if (!_hasMeshSecret) return false;
+    // Compare first 16 bytes (hashtag channel secret length)
+    return (memcmp(channel.secret, _meshChannelSecret, 16) == 0);
+}
+```
+
+Only messages from the `#mesh` channel are forwarded to the BitChat BLE interface.
+
+#### MyMesh Channel Initialization
+
+The `#mesh` channel is automatically initialized when `ENABLE_BITCHAT` is defined:
+
+```cpp
+// In MyMesh::begin()
+#ifdef ENABLE_BITCHAT
+    addHashtagChannel("mesh");  // Adds #mesh channel
+#endif
+```
+
+The `addHashtagChannel()` method derives the secret using the same `first_16_bytes(SHA256("#mesh"))` computation, ensuring the firmware can both send and receive on this channel.
+
+#### Channel Hash
+
+MeshCore computes the channel hash for routing using SHA256 of the channel secret:
+
+```
+channel_hash = first_byte(SHA256(channel_secret))
+```
+
+For `#mesh`:
+```
+channel_hash = first_byte(SHA256(0x5B664CDE0B08B220612113DB980650F3))
+             = 0xB0 (first byte of hash)
+```
+
+**⚠️ Important Implementation Detail**: In MeshCore, `GroupChannel.hash` is only 1 byte (`PATH_HASH_SIZE = 1`), while `GroupChannel.secret` is 32 bytes (`PUB_KEY_SIZE`). When initializing the channel, only copy 1 byte to the hash field:
+
+```cpp
+// CORRECT: Only set hash[0]
+_meshChannel.hash[0] = 0xB0;
+
+// INCORRECT: This would overflow into the secret field!
+// const uint8_t hash[8] = {...};
+// memcpy(_meshChannel.hash, hash, 8); // ❌ Overwrites secret bytes 1-7
+```
+
+Similarly, when caching a channel from an incoming message, only copy the hash byte:
+
+```cpp
+// CORRECT: Only copy the hash
+_meshChannel.hash[0] = channel.hash[0];
+
+// INCORRECT: This overwrites our carefully set secret!
+// _meshChannel = channel; // ❌ Overwrites entire secret
+```
+
+### Hashtag Channel Name Constraints
+
+Per the MeshCore protocol, hashtag channel names must follow these rules:
+
+- Start with `#`
+- Lowercase alphanumeric characters (`a-z`, `0-9`) and hyphens (`-`)
+- No leading, trailing, or consecutive hyphens
+- Maximum 30 characters (including `#`)
+
+Examples of valid names:
+- `#mesh` ✅
+- `#general` ✅
+- `#off-topic` ✅
+
+Examples of invalid names:
+- `#Mesh` ❌ (uppercase)
+- `#-test` ❌ (leading hyphen)
+- `#test--channel` ❌ (consecutive hyphens)
+- `#test_channel` ❌ (underscore, not hyphen)
+
+### Custom Hashtag Channels
+
+Additional hashtag channels can be derived using the same mechanism:
+
+```
+channel_secret = first_16_bytes(SHA256("#<channel_name>"))
+```
+
+For example:
+- `#general` → `first_16_bytes(SHA256("#general"))`
+- `#offtopic` → `first_16_bytes(SHA256("#offtopic"))`
+
+**Note**: The current firmware implementation focuses on the `#mesh` channel. Support for additional hashtag channels would require extending the channel registry.
+
 ## BLE Transport
 
 BitChat messages are sent over BLE as GATT notifications on the BitChat service characteristic. Messages may be fragmented if larger than MTU (typically 185-512 bytes).

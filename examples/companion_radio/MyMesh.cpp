@@ -894,6 +894,32 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
   //_prefs.rx_delay_base = 10.0f;  enable once new algo fixed
 }
 
+void MyMesh::addHashtagChannel(const char* name) {
+#ifdef MAX_GROUP_CHANNELS
+  // Derive secret from hashtag: first 16 bytes of SHA256("#<name>")
+  // Per MeshCore spec: https://github.com/jkingsman/meshcore-packet-knife
+  char hashtag[33];
+  snprintf(hashtag, sizeof(hashtag), "#%s", name);
+  
+  uint8_t secret[16];  // First 16 bytes of SHA256
+  // Use SHA256 and take first 16 bytes for the secret
+  uint8_t sha256_result[32];
+  mesh::Utils::sha256(sha256_result, 32, (uint8_t*)hashtag, strlen(hashtag));
+  memcpy(secret, sha256_result, 16);  // First 16 bytes only
+  
+  // Use BaseChatMesh's public method to add the channel (16-byte secret)
+  ChannelDetails* dest = BaseChatMesh::addHashtagChannel(name, secret, 16);
+  
+  if (dest != NULL) {
+    Serial.printf("[MyMesh] Added hashtag channel: %s\n", name);
+  } else {
+    Serial.printf("[MyMesh] Cannot add hashtag channel '%s': channel table full\n", name);
+  }
+#else
+  (void)name; // suppress unused warning
+#endif
+}
+
 void MyMesh::begin(bool has_display) {
   BaseChatMesh::begin();
 
@@ -955,6 +981,12 @@ void MyMesh::begin(bool has_display) {
   _store->loadContacts(this);
   bootstrapRTCfromContacts();
   addChannel("Public", PUBLIC_GROUP_PSK); // pre-configure Andy's public channel
+  
+#ifdef ENABLE_BITCHAT
+  // Story 4: Add #mesh hashtag channel for BitChat integration
+  addHashtagChannel("mesh");
+#endif
+  
   _store->loadChannels(this);
 
   radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
@@ -2160,5 +2192,19 @@ bool MyMesh::advert() {
 #ifdef ENABLE_BITCHAT
 void MyMesh::initBitchat(BitchatBridge *bridge) {
   _bitchatBridge = bridge;
+}
+
+bool MyMesh::initBitchatMeshChannel() {
+  Serial.println("[MyMesh] initBitchatMeshChannel() called");
+  
+  if (_bitchatBridge == nullptr) {
+    Serial.println("[MyMesh] ERROR: Cannot init mesh channel - bridge not initialized");
+    return false;
+  }
+  
+  // Initialize the #mesh channel in the bridge
+  bool result = _bitchatBridge->initMeshChannel();
+  Serial.printf("[MyMesh] initMeshChannel result: %s\n", result ? "SUCCESS" : "FAILED");
+  return result;
 }
 #endif

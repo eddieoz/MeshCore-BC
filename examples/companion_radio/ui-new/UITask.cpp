@@ -456,6 +456,11 @@ public:
       } else {
         _task->setBitChatMode(true);
         _task->showAlert("BitChat Mode", 1000);
+#ifdef ENABLE_BITCHAT
+        // Initialize #mesh channel for sending messages from BitChat to MeshCore
+        extern MyMesh the_mesh;
+        the_mesh.initBitchatMeshChannel();
+#endif
       }
       return true;
     }

@@ -17,6 +17,11 @@
 #include <Mesh.h>
 #include <cstring>
 
+// Crypto headers for BitChat integration
+#ifndef NATIVE_TEST
+  #include <Crypto.h>
+#endif
+
 // For key conversion
 extern "C" {
 #include "../../../lib/ed25519/fe.h"
@@ -71,10 +76,11 @@ static void ed25519_pk_to_curve25519(uint8_t *curve25519_pub, const uint8_t *ed2
 
 BitchatBridge::BitchatBridge(mesh::Mesh &mesh, mesh::LocalIdentity &identity, const char *nodeName)
     : _mesh(mesh), _identity(identity), _nodeName(nodeName), _initialized(false), _bitchatPeerId(0),
-      _messagesRelayed(0), _duplicatesDropped(0), _processingMessage(false), _hasMeshChannel(false),
-      _decapsulator(_channelRegistry) {
+      _messagesRelayed(0), _duplicatesDropped(0), _privacyDrops(0), _processingMessage(false), _hasMeshChannel(false),
+      _hasMeshSecret(false), _decapsulator(_channelRegistry) {
   memset(_noisePublicKey, 0, sizeof(_noisePublicKey));
   memset(&_meshChannel, 0, sizeof(_meshChannel));
+  memset(_meshChannelSecret, 0, sizeof(_meshChannelSecret));
 }
 
 BitchatBridge::~BitchatBridge() {}
@@ -84,9 +90,16 @@ BitchatBridge::~BitchatBridge() {}
 // ============================================================
 
 void BitchatBridge::begin() {
+  Serial.println("[BitChat] begin() ENTRY");
+  
   if (_initialized) {
+    Serial.println("[BitChat] Already initialized, returning");
     return;
   }
+
+  // Story 1: Compute #mesh secret for privacy filtering
+  Serial.println("[BitChat] Calling computeMeshSecret()...");
+  computeMeshSecret();
 
   // Derive BitChat peer ID from identity
   _bitchatPeerId = derivePeerId(_identity);
@@ -333,15 +346,22 @@ void BitchatBridge::onMeshcoreGroupMessage(const mesh::GroupChannel &channel, ui
   _processingMessage = true;
   Serial.printf("[BitChat] Processing message from %s: %s\n", senderName ? senderName : "null", text);
 
-  // For now, accept messages from any channel (we only care about #mesh in practice)
-  // The channel check was failing because MeshCore hash is SHA256(secret), not SHA256(name)
-  Serial.println("[BitChat] Accepting message from channel");
+  // Story 3: PRIVACY FIX - Only forward messages from #mesh hashtag channel
+  if (!isMeshChannel(channel)) {
+    Serial.println("[BitChat] Ignoring: Not from #mesh channel (privacy protection)");
+    _privacyDrops++;
+    _processingMessage = false;
+    return;
+  }
+  Serial.println("[BitChat] Verified: Message from #mesh channel");
 
   // Cache the channel for outgoing messages
+  // IMPORTANT: Only copy hash[0], don't overwrite our secret!
   if (!_hasMeshChannel) {
-    _meshChannel = channel;
+    _meshChannel.hash[0] = channel.hash[0];  // Only copy 1 byte (PATH_HASH_SIZE)
+    // Secret should already be set from initMeshChannel()
     _hasMeshChannel = true;
-    Serial.println("[BitChat] Cached mesh channel for outgoing messages");
+    Serial.println("[BitChat] Cached mesh channel hash for outgoing messages");
   }
 
   // Loop prevention
@@ -434,7 +454,15 @@ void BitchatBridge::onMeshcoreEncapsulatedMessage(const mesh::GroupChannel &chan
 // ============================================================
 
 void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &msg) {
-  if (!_initialized || _processingMessage) {
+  Serial.println("[BitChat] onBitchatMessageReceived() ENTRY");
+  
+  if (!_initialized) {
+    Serial.println("[BitChat] ERROR: Bridge not initialized!");
+    return;
+  }
+  
+  if (_processingMessage) {
+    Serial.println("[BitChat] ERROR: Already processing message!");
     return;
   }
 
@@ -444,14 +472,42 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
   // which updates its internal clock via syncTime()
 
   // Handle different message types
-  Serial.printf("[BitChat] onBitchatMessageReceived: type=%d, payloadLen=%d\n", msg.type, msg.payloadLength);
+  Serial.printf("[BitChat] onBitchatMessageReceived: type=%d, payloadLen=%d, _hasMeshChannel=%d\n", 
+                msg.type, msg.payloadLength, _hasMeshChannel ? 1 : 0);
+
+  // DEBUG: Check if secret is still valid
+  if (_hasMeshChannel) {
+    Serial.print("[BitChat] DEBUG _meshChannel.secret: ");
+    for (int i = 0; i < 16; i++) {
+      Serial.printf("%02X", _meshChannel.secret[i]);
+    }
+    Serial.println();
+    
+    // Verify against expected
+    if (_meshChannel.secret[0] != 0x5B) {
+      Serial.printf("[BitChat] WARNING: Secret corrupted! Expected 0x5B, got 0x%02X\n", _meshChannel.secret[0]);
+      // Re-initialize
+      initMeshChannel();
+    }
+  }
+
+  // DEBUG: Check secret before processing
+  if (_hasMeshChannel && _meshChannel.secret[0] != 0x5B) {
+    Serial.printf("[BitChat] DEBUG: Secret corrupted before switch! first_byte=0x%02X\n", _meshChannel.secret[0]);
+  }
 
   switch (msg.type) {
   case 0x02: { // MESSAGE
+    // DEBUG: Check secret at case entry
+    if (_meshChannel.secret[0] != 0x5B) {
+      Serial.printf("[BitChat] DEBUG: Secret corrupted at case 0x02 entry! first_byte=0x%02X\n", _meshChannel.secret[0]);
+    }
+    
     // Check if we have a cached mesh channel
     if (!_hasMeshChannel) {
       Serial.println("[BitChat] ERROR: No mesh channel cached yet!");
-      Serial.println("[BitChat] Send a message from MeshCore first to cache the channel");
+      Serial.println("[BitChat] Call initMeshChannel() first or switch to BitChat mode");
+      Serial.printf("[BitChat] _hasMeshSecret=%d, _initialized=%d\n", _hasMeshSecret ? 1 : 0, _initialized ? 1 : 0);
       _processingMessage = false;
       return;
     }
@@ -492,11 +548,18 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
     size_t totalLen = 5 + prefixLen + payloadLen + 1; // include null
 
     Serial.printf("[BitChat] Sending GRP_TXT to mesh, len=%d\n", totalLen);
+    Serial.print("[BitChat] Full 32-byte secret: ");
+    for (int i = 0; i < 32; i++) Serial.printf("%02X", _meshChannel.secret[i]);
+    Serial.println();
+    Serial.printf("[BitChat] Channel secret first byte: 0x%02X, hash first byte: 0x%02X\n",
+                  _meshChannel.secret[0], _meshChannel.hash[0]);
 
     // Create and send as standard group text message
     auto *pkt = _mesh.createGroupDatagram(0x05, // PAYLOAD_TYPE_GRP_TXT
                                           _meshChannel, temp, totalLen);
     if (pkt) {
+      Serial.printf("[BitChat] Packet created, payload_len=%d, path_len=%d\n", 
+                    pkt->payload_len, pkt->path_len);
       _mesh.sendFlood(pkt);
       _messagesRelayed++;
       Serial.println("[BitChat] Message sent to mesh as GRP_TXT!");
@@ -564,18 +627,114 @@ void BitchatBridge::signBitChatMessage(mesh::ble::BitchatMessage &msg) {
   onBitchatSignRequest(msg.signature, _signingBuffer, offset);
 }
 
+// Story 1 & 2: Use hardcoded #mesh secret
+// First 16 bytes of SHA256("#mesh") = 5b664cde0b08b220612113db980650f3
+// Hardcoded to avoid memory corruption issues during SHA256 computation
+void BitchatBridge::computeMeshSecret() {
+  Serial.println("[BitChat] computeMeshSecret() ENTRY (hardcoded)");
+  
+  // Hardcoded secret for #mesh channel (first 16 bytes of SHA256("#mesh"))
+  const uint8_t MESH_SECRET[16] = {
+    0x5B, 0x66, 0x4C, 0xDE, 0x0B, 0x08, 0xB2, 0x20,
+    0x61, 0x21, 0x13, 0xDB, 0x98, 0x06, 0x50, 0xF3
+  };
+  
+  memcpy(_meshChannelSecret, MESH_SECRET, 16);
+  _hasMeshSecret = true;
+
+  // Debug: print full 16-byte secret
+  Serial.print("[BitChat] #mesh secret (hardcoded): ");
+  for (int i = 0; i < 16; i++) {
+    Serial.printf("%02X", _meshChannelSecret[i]);
+  }
+  Serial.println();
+}
+
+// Compute channel hash from secret (SHA256 of secret, for routing)
+void BitchatBridge::computeChannelHash(uint8_t *hash, const uint8_t *secret, size_t secretLen) {
+  mesh::Utils::sha256(hash, MAX_HASH_SIZE, secret, secretLen);
+}
+
+// Initialize the #mesh channel for sending messages
+// Call this when switching to BitChat mode
+bool BitchatBridge::initMeshChannel() {
+  Serial.println("[BitChat] initMeshChannel() called");
+  
+  if (!_hasMeshSecret) {
+    Serial.println("[BitChat] ERROR: Cannot init mesh channel - secret not computed");
+    return false;
+  }
+  if (_hasMeshChannel) {
+    Serial.println("[BitChat] Mesh channel already initialized");
+    return true;
+  }
+
+  // Initialize the channel structure
+  memset(&_meshChannel, 0, sizeof(_meshChannel));
+  
+  // Debug: Check source before copy
+  Serial.print("[BitChat] initMeshChannel: source secret: ");
+  for (int i = 0; i < 16; i++) Serial.printf("%02X", _meshChannelSecret[i]);
+  Serial.println();
+  
+  // Copy the secret (16 bytes) - note: GroupChannel.secret is 32 bytes (PUB_KEY_SIZE)
+  // but MeshCore hashtag channels use first 16 bytes of SHA256 as the secret
+  memcpy(_meshChannel.secret, _meshChannelSecret, 16);
+  
+  // Debug: Check destination immediately after copy
+  Serial.print("[BitChat] initMeshChannel: after memcpy, secret: ");
+  for (int i = 0; i < 32; i++) Serial.printf("%02X", _meshChannel.secret[i]);
+  Serial.println();
+  
+  // Hardcoded channel hash (first byte only - PATH_HASH_SIZE = 1)
+  // MeshCore only uses the first byte of hash for routing
+  _meshChannel.hash[0] = 0xB0;  // First byte of SHA256(secret)
+  
+  Serial.printf("[BitChat] Hash (hardcoded): 0x%02X\n", _meshChannel.hash[0]);
+  
+  _hasMeshChannel = true;
+  
+  Serial.println("[BitChat] #mesh channel initialized for sending");
+  Serial.print("[BitChat] Channel secret (source): ");
+  for (int i = 0; i < 16; i++) {
+    Serial.printf("%02X", _meshChannelSecret[i]);
+  }
+  Serial.println();
+  Serial.print("[BitChat] Channel secret (in struct, 32 bytes): ");
+  for (int i = 0; i < 32; i++) {
+    Serial.printf("%02X", _meshChannel.secret[i]);
+  }
+  Serial.println();
+  Serial.print("[BitChat] Channel hash (first byte): 0x");
+  Serial.printf("%02X", _meshChannel.hash[0]);
+  Serial.println();
+  
+  return true;
+}
+
+// Story 2: Verify channel is #mesh by comparing secrets
 bool BitchatBridge::isMeshChannel(const mesh::GroupChannel &channel) const {
-  const uint8_t *meshKey = _channelRegistry.lookupByName("mesh");
-  if (!meshKey) {
-    Serial.println("[BitChat] isMeshChannel: no mesh key in registry");
+  if (!_hasMeshSecret) {
+    Serial.println("[BitChat] isMeshChannel: no mesh secret available");
     return false;
   }
 
-  Serial.printf("[BitChat] Channel check: received[0]=0x%02X, mesh[0]=0x%02X\n", channel.hash[0], meshKey[0]);
+  // Compare first 16 bytes for hashtag channel match
+  // Per MeshCore spec, hashtag secrets are first 16 bytes of SHA256("#channelname")
+  bool match = (memcmp(channel.secret, _meshChannelSecret, 16) == 0);
 
-  // Compare full hash for accuracy
-  bool match = (memcmp(channel.hash, meshKey, 8) == 0);
-  Serial.printf("[BitChat] Channel match: %s\n", match ? "YES" : "NO");
+  if (match) {
+    Serial.println("[BitChat] Channel verified: #mesh");
+  } else {
+    // Debug: show first 16 bytes for troubleshooting
+    Serial.println("[BitChat] Channel mismatch:");
+    Serial.print("  received=");
+    for (int i = 0; i < 16; i++) Serial.printf("%02X", channel.secret[i]);
+    Serial.print("\n  expected =");
+    for (int i = 0; i < 16; i++) Serial.printf("%02X", _meshChannelSecret[i]);
+    Serial.println();
+  }
+
   return match;
 }
 

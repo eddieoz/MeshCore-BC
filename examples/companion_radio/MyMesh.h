@@ -187,7 +187,14 @@ public:
 #ifdef ENABLE_BITCHAT
   // Initialize BitChat bridge (Story 10.4)
   void initBitchat(BitchatBridge* bridge);
+  
+  // Initialize #mesh channel when switching to BitChat mode
+  // Returns true if channel was initialized successfully
+  bool initBitchatMeshChannel();
 #endif
+
+  // Story 4: Add hashtag channel (public channel with SHA256-derived secret)
+  void addHashtagChannel(const char* name);
 
 private:
   void writeOKFrame();

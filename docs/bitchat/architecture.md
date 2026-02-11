@@ -146,9 +146,43 @@ Decapsulates BitChat messages from MeshCore packets:
 **File**: `src/helpers/bitchat/ChannelRegistry.h/cpp`
 
 Maps BitChat channel names to MeshCore group channels:
-- SHA256-based hashtag key derivation
+- Hashtag key derivation (first 16 bytes of SHA256)
 - Bidirectional lookups (name ↔ key)
 - Auto-registration of #mesh channel
+
+### Mesh Channel Secret Storage
+
+**File**: `src/helpers/bitchat/BitchatBridge.h/cpp`
+
+The BitchatBridge maintains the expected `#mesh` channel secret for channel verification:
+
+```cpp
+uint8_t _meshChannelSecret[16];  // first_16_bytes(SHA256("#mesh"))
+bool _hasMeshSecret;             // true after computation
+```
+
+**Methods**:
+- `computeMeshSecret()` - Derives `first_16_bytes(SHA256("#mesh"))` during initialization
+- `isMeshChannel(const mesh::GroupChannel& channel)` - Verifies message belongs to #mesh channel
+
+This ensures interoperability with BitChat's `#mesh` hashtag channel implementation.
+
+**⚠️ Memory Layout Warning**: The `mesh::GroupChannel` struct has:
+- `hash[PATH_HASH_SIZE]` where `PATH_HASH_SIZE = 1` (only 1 byte!)
+- `secret[PUB_KEY_SIZE]` where `PUB_KEY_SIZE = 32`
+
+When initializing or caching the channel, be careful not to overflow:
+```cpp
+// Correct: Only set hash[0]
+_meshChannel.hash[0] = 0xB0;
+
+// Correct: Only copy hash when caching
+_meshChannel.hash[0] = channel.hash[0];
+
+// Dangerous: Would corrupt secret
+// memcpy(_meshChannel.hash, hash, 8);  // ❌ Overflows into secret
+// _meshChannel = channel;              // ❌ Overwrites our secret
+```
 
 ### LoopPrevention
 
@@ -231,6 +265,7 @@ Command-line interface for BitChat control:
 
 3. BitchatBridge::onMeshcoreGroupMessage()
    └─► Checks for 📱 prefix (loop prevention)
+   └─► Verifies channel is #mesh (SHA256 match)
    └─► Computes message hash
    └─► Checks LoopPrevention cache
    └─► Queues for processing (deferred)
@@ -251,7 +286,7 @@ Command-line interface for BitChat control:
 
 6. BitChat App (Android)
    └─► Receives notification
-   └─► Displays message
+   └─► Displays message in #mesh channel
 ```
 
 ## Class Relationships

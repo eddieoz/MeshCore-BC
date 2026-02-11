@@ -55,6 +55,13 @@ public:
   void begin();
 
   /**
+   * @brief Initialize the #mesh channel for sending messages
+   * Call this when switching to BitChat mode to enable sending from BitChat to MeshCore
+   * @return true if channel was initialized successfully
+   */
+  bool initMeshChannel();
+
+  /**
    * @brief Initialize BLE in standalone mode (for nRF52)
    * @param deviceName BLE device name for advertising
    * @return true if successful
@@ -153,6 +160,17 @@ private:
   // Statistics
   uint32_t _messagesRelayed;
   uint32_t _duplicatesDropped;
+  uint32_t _privacyDrops;  // Messages dropped due to channel privacy filter
+
+  // Story 1: #mesh channel secret for privacy filtering (SHA256("#mesh"))
+  uint8_t _meshChannelSecret[16];  // First 16 bytes of SHA256("#mesh")
+  bool _hasMeshSecret;
+
+  // Compute #mesh secret from hashtag
+  void computeMeshSecret();
+
+  // Compute channel hash from secret
+  void computeChannelHash(uint8_t *hash, const uint8_t *secret, size_t secretLen);
 
   // Time synchronization handled by BitchatBLEService directly
 
@@ -187,6 +205,12 @@ private:
   uint64_t derivePeerId(const mesh::LocalIdentity &identity);
   uint64_t getCurrentTimeMs() const;
   mesh::GroupChannel *getMeshChannel();
+
+public:
+  // Story 8: CLI status helpers
+  const uint8_t* getMeshChannelSecret() const { return _hasMeshSecret ? _meshChannelSecret : nullptr; }
+  bool hasMeshSecret() const { return _hasMeshSecret; }
+  uint32_t getPrivacyDrops() const { return _privacyDrops; }
 };
 
 #endif // ENABLE_BITCHAT
