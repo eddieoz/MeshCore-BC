@@ -392,9 +392,47 @@ void onBLEWrite() {
 
 | Feature | ESP32 | nRF52 | Native |
 |---------|-------|-------|--------|
-| BLE | ESP-IDF GATT | Bluefruit | Mock |
+| BLE | ESP-IDF GATT (NimBLE) | Nordic SoftDevice | Mock |
+| BLE Callbacks | `BLECharacteristicCallbacks` | `BLECharacteristic::WriteCallback` | Stub |
 | Crypto | Hardware AES | Software | Stub |
 | Filesystem | SPIFFS | InternalFS | Mock |
+| Mode Switching | `setBitChatMode()` - UUID swap | Menu-based UUID swap | N/A |
+
+### ESP32 BLE Implementation
+
+ESP32 uses the NimBLE stack with `BLECharacteristicCallbacks` for event handling:
+
+```cpp
+class BitchatBLEService : public BLEServiceWrapper, 
+                          public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) override;
+    void onRead(BLECharacteristic* pCharacteristic) override;
+    void onNotify(BLECharacteristic* pCharacteristic) override;
+    void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) override;
+};
+```
+
+**Key ESP32 Characteristics:**
+- Service attaches to existing BLE server from `SerialBLEInterface`
+- Uses `BLE2902` descriptor for notification enable/disable
+- Write handling performs minimal work in callback (deferred processing)
+- Mode switching changes advertisement UUID via `setBitChatMode()`
+
+### nRF52 BLE Implementation
+
+nRF52 uses Adafruit Bluefruit with callback-based write handling:
+
+```cpp
+// Bluefruit-style callback registration
+_characteristic.setWriteCallback(onWriteCallback);
+
+// ISR-safe deferred processing
+static volatile bool _pendingData;
+void onWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, uint16_t len) {
+    // Minimal work: copy to buffer and set flag
+    _pendingData = true;
+}
+```
 
 ## Configuration
 
@@ -405,6 +443,7 @@ ENABLE_BITCHAT          // Include BitChat code
 BITCHAT_DEBUG           // Enable debug logging
 NRF52_PLATFORM          // nRF52-specific code
 ESP32                   // ESP32-specific code
+BLE_MODE_SWITCHING      // Enable menu-based BLE mode switching
 ```
 
 ### Runtime Configuration

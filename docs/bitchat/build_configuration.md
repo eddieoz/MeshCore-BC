@@ -82,6 +82,26 @@ build_flags =
     -D BITCHAT_MAX_PAYLOAD_SIZE=2048
 ```
 
+#### nRF52 Menu-Based Switching
+
+nRF52 uses the same menu-based switching UI as ESP32:
+
+```cpp
+// In UITask.cpp - Identical for both platforms
+if (c == KEY_ENTER && _page == HomePage::BLE_MODE) {
+  if (_task->isBitChatMode()) {
+    _task->setBitChatMode(false);
+    _task->showAlert("MeshCore Mode", 1000);
+  } else {
+    _task->setBitChatMode(true);
+    _task->showAlert("BitChat Mode", 1000);
+    the_mesh.initBitchatMeshChannel();
+  }
+}
+```
+
+The mode is stored in `Bluefruit` advertising data and switched via the UI menu system.
+
 #### nRF52 Memory Considerations
 
 | Component | Flash | RAM |
@@ -94,13 +114,13 @@ build_flags =
 
 ### ESP32 Platform
 
-ESP32 supports BitChat through the `BitchatBLEService` class which attaches to the existing BLE server managed by `SerialBLEInterface`.
+ESP32 supports BitChat through the `BitchatBLEService` class which attaches to the existing BLE server managed by `SerialBLEInterface`. Both ESP32 and nRF52 now support identical **menu-based mode switching**.
 
 ```ini
 build_flags =
     -D ENABLE_BITCHAT=1
     -D ESP32
-    -D BITCHAT_SUPPORT_COEXISTENCE=1  ; Can support simultaneous services
+    -D BLE_MODE_SWITCHING=1  ; Enable menu-based BLE mode switching
 ```
 
 #### ESP32 BLE Initialization
@@ -126,15 +146,51 @@ On ESP32, BitChat integrates with the existing BLE stack:
 
 #### ESP32 Mode Switching
 
-ESP32 supports runtime mode switching between MeshCore and BitChat:
+ESP32 supports **menu-based runtime mode switching** identical to nRF52:
 
 ```cpp
-// Switch to BitChat mode
-serial_interface.setBitChatMode(true);
-
-// Switch back to MeshCore mode
-serial_interface.setBitChatMode(false);
+// In UITask.cpp - Menu-based switching
+if (c == KEY_ENTER && _page == HomePage::BLE_MODE) {
+  if (_task->isBitChatMode()) {
+    _task->setBitChatMode(false);  // Switch to MeshCore
+    _task->showAlert("MeshCore Mode", 1000);
+  } else {
+    _task->setBitChatMode(true);   // Switch to BitChat
+    _task->showAlert("BitChat Mode", 1000);
+    the_mesh.initBitchatMeshChannel();  // Prepare #mesh channel
+  }
+}
 ```
+
+**Implementation in `SerialBLEInterface`:**
+
+```cpp
+void SerialBLEInterface::setBitChatMode(bool enable) {
+  if (_bitchatMode == enable) return;
+  _bitchatMode = enable;
+  
+  // Stop advertising
+  pServer->getAdvertising()->stop();
+  
+  // Change advertised UUID
+  BLEAdvertisementData oAdvertisementData;
+  if (_bitchatMode && _bitchatService != nullptr) {
+    oAdvertisementData.setCompleteServices(BLEUUID(_bitchatService->getUUID()));
+  } else {
+    oAdvertisementData.setCompleteServices(BLEUUID(SERVICE_UUID));
+  }
+  
+  // Restart advertising with new UUID
+  pServer->getAdvertising()->setAdvertisementData(oAdvertisementData);
+  pServer->getAdvertising()->start();
+}
+```
+
+**UI Display:**
+- Navigate to **BLE_MODE** page using LEFT/RIGHT keys
+- Display shows **"M"** (MeshCore) or **""** (BitChat) with mode name
+- Press **ENTER** to toggle
+- Alert shows "MeshCore Mode" or "BitChat Mode" for 1 second
 
 #### ESP32 Memory Considerations
 
@@ -146,15 +202,19 @@ serial_interface.setBitChatMode(false);
 
 **ESP32 Limits**: 4MB+ Flash, 520KB RAM
 
-#### ESP32 vs nRF52 Differences
+#### ESP32 vs nRF52 Comparison
 
 | Feature | ESP32 | nRF52 |
 |---------|-------|-------|
 | BLE Stack | ESP-IDF NimBLE | Nordic SoftDevice |
 | Service Creation | `initESP32()` attaches to existing server | `initNRF52()` creates standalone |
-| Mode Switching | `setBitChatMode()` changes advertisement | Menu-based switching |
+| Mode Switching | Menu-based `setBitChatMode()` | Menu-based `setBitChatMode()` |
+| Menu Navigation | LEFT/RIGHT to BLE_MODE, ENTER to toggle | LEFT/RIGHT to BLE_MODE, ENTER to toggle |
+| Visual Indicator | "M" / "" on display | "M" / "" on display |
 | MTU Handling | Automatic | Manual negotiation |
 | Security | Open (BitChat) / PIN (MeshCore) | Open (BitChat) / PIN (MeshCore) |
+
+**Platform Parity**: Both ESP32 and nRF52 now support identical menu-based BLE mode switching UX. The only difference is the underlying BLE stack implementation (NimBLE vs SoftDevice).
 
 ## Debug Configuration
 
@@ -246,7 +306,7 @@ build_flags =
     -D BLE_MODE_SWITCHING=1
 ```
 
-### Heltec V3
+### Heltec V3 (ESP32)
 
 ```ini
 [env:Heltec_v3_companion_radio_ble]
@@ -255,8 +315,14 @@ board = heltec_wifi_lora_32_V3
 build_flags = 
     ${esp32_base.build_flags}
     -D ENABLE_BITCHAT=1
-    -D BITCHAT_SUPPORT_COEXISTENCE=1
+    -D BLE_MODE_SWITCHING=1
 ```
+
+**ESP32-specific features:**
+- Menu-based BLE mode switching (identical to nRF52)
+- `BLECharacteristicCallbacks` for event handling
+- Dynamic UUID switching via `setBitChatMode()`
+- Compatible with Heltec V3 OLED display for mode indication
 
 ## Build Commands
 

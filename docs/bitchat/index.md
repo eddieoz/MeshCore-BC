@@ -54,6 +54,19 @@ The BitChat integration enables MeshCore devices to communicate with the BitChat
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Platform Support
+
+| Feature | nRF52 | ESP32 |
+|---------|-------|-------|
+| Menu-based BLE mode switching | ✅ | ✅ |
+| Visual mode indicator (M/B) | ✅ | ✅ |
+| BitChat BLE service | ✅ | ✅ |
+| MeshCore UART service | ✅ | ✅ |
+| PIN authentication (MeshCore mode) | ✅ | ✅ |
+| Open access (BitChat mode) | ✅ | ✅ |
+
+Both platforms support identical menu-based switching between MeshCore and BitChat BLE modes. Navigate to the **BLE_MODE** page and press **ENTER** to toggle between modes.
+
 ## Documentation Structure
 
 | Document | Description |
@@ -140,9 +153,26 @@ See [Protocol Specification](./protocol_specification.md#hashtag-channels) for t
 |-------|--------|------------|
 | BLE Notification Freeze | ⚠️ Partial | MeshCore→BitChat notifications currently disabled on nRF52 |
 | Channel Hash Mismatch | ✅ Fixed | #mesh channel verified by full 32-byte secret |
-| Simultaneous BLE Services | ❌ nRF52 Limit | Menu-based switching instead |
+| Simultaneous BLE Services | ❌ HW Limit | Menu-based switching (both nRF52 and ESP32) |
 | DM Support | 🚧 Planned | Basic infrastructure in place |
 | Multiple Hashtag Channels | 🚧 Planned | Currently #mesh only |
+
+### Menu-Based BLE Mode Switching
+
+Due to BLE advertising size constraints, both nRF52 and ESP32 platforms use **menu-based switching** rather than simultaneous services:
+
+**Navigation:**
+1. Use **LEFT/RIGHT** keys to navigate to the **BLE_MODE** page
+2. Display shows:
+   - **"M"** with "MeshCore" text → MeshCore mode active
+   - **""** with "BitChat" text → BitChat mode active
+3. Press **ENTER** to toggle between modes
+
+**Platform-Specific Implementation:**
+- **nRF52**: Switches advertisement data between Nordic UART and BitChat service UUIDs
+- **ESP32**: Uses `setBitChatMode()` to dynamically change advertised UUID via `SerialBLEInterface`
+
+Both platforms provide identical user experience for mode switching.
 
 ## Compatibility
 

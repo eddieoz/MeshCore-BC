@@ -23,7 +23,7 @@ The BitChat BLE Service provides a GATT interface for the BitChat Android app to
 
 ## BLE Mode Switching
 
-Due to nRF52 advertising size limitations (31 bytes), the device uses menu-based switching between BLE modes:
+Due to BLE advertising size limitations (31 bytes), both nRF52 and ESP32 platforms use **menu-based switching** between BLE modes:
 
 ```
 MeshCore Mode          BitChat Mode
@@ -32,18 +32,65 @@ MeshCore Mode          BitChat Mode
 ┌──────────┐           ┌──────────┐
 │ Nordic   │           │ BitChat  │
 │ UART     │           │ Service  │
-│ 6E40...  │           │ F47B...  │
+│ 6E40...  │    ◄──►   │ F47B...  │
 │ PIN auth │           │ Open     │
 └──────────┘           └──────────┘
+        
+        (Menu-based toggle on both platforms)
 ```
 
 ### Mode Selection Menu
 
-Access via device UI: Home → BLE Mode → Select Mode
+**Access via device UI:**
+1. Press **LEFT/RIGHT** to navigate to the **BLE_MODE** page
+2. Display shows current mode:
+   - **"M"** = MeshCore mode (Nordic UART service on nRF52, UART on ESP32)
+   - **"B"** = BitChat mode (BitChat service)
+3. Press **ENTER** to toggle between modes
+4. Alert displays "MeshCore Mode" or "BitChat Mode" for 1 second
 
-Visual indicators:
-- **M** = MeshCore mode (Nordic UART service)
-- **B** = BitChat mode (BitChat service)
+### Platform-Specific Switching
+
+#### nRF52
+
+On nRF52, mode switching changes the advertised service UUID:
+
+```cpp
+// Bluefruit API
+Bluefruit.Advertising.clearServices();
+if (bitchatMode) {
+    Bluefruit.Advertising.addService(bitchatService);
+} else {
+    Bluefruit.Advertising.addService(bleuart);
+}
+Bluefruit.Advertising.start();
+```
+
+#### ESP32
+
+On ESP32, mode switching uses `SerialBLEInterface::setBitChatMode()`:
+
+```cpp
+void SerialBLEInterface::setBitChatMode(bool enable) {
+    if (_bitchatMode == enable) return;
+    _bitchatMode = enable;
+    
+    // Stop advertising
+    pServer->getAdvertising()->stop();
+    
+    // Change advertised UUID
+    BLEAdvertisementData oAdvertisementData;
+    if (_bitchatMode && _bitchatService != nullptr) {
+        oAdvertisementData.setCompleteServices(BLEUUID(_bitchatService->getUUID()));
+    } else {
+        oAdvertisementData.setCompleteServices(BLEUUID(SERVICE_UUID));
+    }
+    
+    // Restart with new UUID
+    pServer->getAdvertising()->setAdvertisementData(oAdvertisementData);
+    pServer->getAdvertising()->start();
+}
+```
 
 ## Connection Security
 
