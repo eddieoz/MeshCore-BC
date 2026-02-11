@@ -6,8 +6,7 @@
  * message flow between the BitChat app and the MeshCore mesh network.
  */
 
-#ifndef BITCHAT_BRIDGE_H
-#define BITCHAT_BRIDGE_H
+#pragma once
 
 #include <map>
 #include <stddef.h>
@@ -160,10 +159,10 @@ private:
   // Statistics
   uint32_t _messagesRelayed;
   uint32_t _duplicatesDropped;
-  uint32_t _privacyDrops;  // Messages dropped due to channel privacy filter
+  uint32_t _privacyDrops; // Messages dropped due to channel privacy filter
 
   // Story 1: #mesh channel secret for privacy filtering (SHA256("#mesh"))
-  uint8_t _meshChannelSecret[16];  // First 16 bytes of SHA256("#mesh")
+  uint8_t _meshChannelSecret[16]; // First 16 bytes of SHA256("#mesh")
   bool _hasMeshSecret;
 
   // Compute #mesh secret from hashtag
@@ -208,10 +207,9 @@ private:
 
 public:
   // Story 8: CLI status helpers
-  const uint8_t* getMeshChannelSecret() const { return _hasMeshSecret ? _meshChannelSecret : nullptr; }
+  const uint8_t *getMeshChannelSecret() const { return _hasMeshSecret ? _meshChannelSecret : nullptr; }
   bool hasMeshSecret() const { return _hasMeshSecret; }
   uint32_t getPrivacyDrops() const { return _privacyDrops; }
 };
 
 #endif // ENABLE_BITCHAT
-#endif // BITCHAT_BRIDGE_H
