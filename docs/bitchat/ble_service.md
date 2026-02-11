@@ -201,6 +201,87 @@ BLEService* _platformService;
 BLECharacteristic* _characteristic;
 ```
 
+Initialization:
+```cpp
+bool initESP32(const char* deviceName) {
+    // Get existing BLE server from SerialBLEInterface
+    BLEServer* server = BLEDevice::getServer();
+    
+    // Create BitChat service
+    _platformService = server->createService(BITCHAT_SERVICE_UUID);
+    
+    // Create characteristic with READ, WRITE, NOTIFY properties
+    _characteristic = _platformService->createCharacteristic(
+        BITCHAT_CHARACTERISTIC_UUID,
+        BLECharacteristic::PROPERTY_READ |
+        BLECharacteristic::PROPERTY_WRITE |
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
+    
+    // Add CCCD descriptor for notifications
+    _characteristic->addDescriptor(new BLE2902());
+    
+    // Set callbacks for write/read events
+    _characteristic->setCallbacks(this);
+    
+    // Start the service
+    _platformService->start();
+    return true;
+}
+```
+
+#### ESP32 BLECharacteristicCallbacks
+
+The ESP32 implementation uses `BLECharacteristicCallbacks` for event handling:
+
+```cpp
+class BitchatBLEService : public BLEServiceWrapper, 
+                          public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) override;
+    void onRead(BLECharacteristic* pCharacteristic) override;
+    void onNotify(BLECharacteristic* pCharacteristic) override;
+    void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) override;
+};
+```
+
+#### ESP32 Write Handling
+
+```cpp
+void BitchatBLEService::onWrite(BLECharacteristic* pCharacteristic) {
+    // MINIMAL WORK IN CALLBACK - BLE stack has limited stack space!
+    std::string value = pCharacteristic->getValue();
+    if (value.empty()) return;
+    
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(value.data());
+    size_t length = value.length();
+    
+    _lastWriteTime = millis();
+    _pendingData = true;  // Flag for loop() to process
+    
+    // Append to write buffer with overflow protection
+    if (_writeBufferOffset + length > sizeof(_writeBuffer)) {
+        clearWriteBuffer();
+    }
+    memcpy(&_writeBuffer[_writeBufferOffset], data, length);
+    _writeBufferOffset += length;
+}
+```
+
+#### ESP32 Notification Sending
+
+```cpp
+bool BitchatBLEService::sendNotification(uint16_t connectionId, 
+                                          const uint8_t* data, 
+                                          size_t len) {
+    if (_characteristic) {
+        _characteristic->setValue(const_cast<uint8_t*>(data), len);
+        _characteristic->notify();
+        return true;
+    }
+    return false;
+}
+```
+
 ## Reentrance Protection
 
 A global lock prevents BLE callback reentrance during send operations:

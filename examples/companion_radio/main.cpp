@@ -236,24 +236,28 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PWD);
   serial_interface.begin(TCP_PORT);
 #elif defined(BLE_PIN_CODE)
-  char dev_name[32 + 16];
-  sprintf(dev_name, "%s%s", BLE_NAME_PREFIX, the_mesh.getNodeName());
-  serial_interface.begin(dev_name, the_mesh.getBLEPin());
+  char dev_name[32 + 16] = "@@MAC";  // Use MAC address as default
+  serial_interface.begin(BLE_NAME_PREFIX, dev_name, the_mesh.getBLEPin());
 
   // Initialize BitChat bridge for ESP32
   // On ESP32, BitChat attaches to existing BLE server
   #ifdef ENABLE_BITCHAT
-  Serial.println("Initializing BitChat bridge...");
+  Serial.println("[BitChat] Initializing bridge...");
   bitchat_bridge.begin();
+  
   if (serial_interface.getBLEServer() != nullptr) {
-    // Attach BitChat service to existing BLE server
+    // Initialize BitChat BLE service on ESP32
     mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
-    // Note: ESP32 attachment would require additional integration
-    // For now, BitChat on ESP32 shares the BLE server
-    Serial.println("BitChat BLE service attached to existing server");
+    
+    // Register BitChat service with SerialBLEInterface for mode switching
+    bitchatService.initESP32(the_mesh.getNodeName());
+    serial_interface.setBitChatService(bitchatService.getESP32Service());
+    
+    Serial.println("[BitChat] BLE service registered for mode switching");
   }
+  
   the_mesh.initBitchat(&bitchat_bridge);
-  Serial.println("BitChat bridge initialized");
+  Serial.println("[BitChat] Bridge fully initialized and registered with mesh");
   #endif
 #elif defined(SERIAL_RX)
   companion_serial.setPins(SERIAL_RX, SERIAL_TX);

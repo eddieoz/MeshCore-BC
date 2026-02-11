@@ -414,6 +414,9 @@ bool BitchatBLEService::onServiceRegistered(void *platformService) {
   // Add descriptor for notifications
   _characteristic->addDescriptor(new BLE2902());
 
+  // Set callbacks for write/read events
+  _characteristic->setCallbacks(this);
+
 #elif defined(NRF52_PLATFORM)
   // For nRF52, the service is already created in initNRF52
   // platformService should be nullptr or we ignore it
@@ -637,6 +640,133 @@ void BitchatBLEService::loop() {
   }
   */
 }
+
+#ifdef ESP32
+bool BitchatBLEService::initESP32(const char *deviceName) {
+  Serial.println("[BitChat BLE] initESP32() called");
+
+  if (_registered) {
+    Serial.println("[BitChat BLE] Already registered");
+    return true;
+  }
+
+  // Check if BLE device is initialized
+  if (!BLEDevice::getInitialized()) {
+    Serial.println("[BitChat BLE] ERROR: BLE not initialized. Call BLEDevice::init() first.");
+    return false;
+  }
+
+  // Get the BLE server - it should be created by SerialBLEInterface
+  BLEServer* server = BLEDevice::getServer();
+  if (server == nullptr) {
+    Serial.println("[BitChat BLE] ERROR: BLE server not created.");
+    return false;
+  }
+
+  // Set device name
+  setNodeName(deviceName);
+
+  // Create the BitChat service
+  // Service UUID: F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C
+  const char* serviceUUID = "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C";
+  _platformService = server->createService(serviceUUID);
+  if (_platformService == nullptr) {
+    Serial.println("[BitChat BLE] ERROR: Failed to create service");
+    return false;
+  }
+
+  // Create the characteristic
+  // Characteristic UUID: F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5D
+  const char* charUUID = "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5D";
+  _characteristic = _platformService->createCharacteristic(
+      charUUID,
+      BLECharacteristic::PROPERTY_READ |
+      BLECharacteristic::PROPERTY_WRITE |
+      BLECharacteristic::PROPERTY_NOTIFY);
+
+  if (_characteristic == nullptr) {
+    Serial.println("[BitChat BLE] ERROR: Failed to create characteristic");
+    return false;
+  }
+
+  // Add CCCD descriptor for notifications
+  _characteristic->addDescriptor(new BLE2902());
+
+  // Start the service
+  _platformService->start();
+
+  _registered = true;
+  Serial.println("[BitChat BLE] ESP32 service initialized successfully");
+  return true;
+}
+
+BLEService* BitchatBLEService::getESP32Service() {
+  return _platformService;
+}
+
+// ESP32 BLECharacteristicCallbacks implementation
+
+void BitchatBLEService::onWrite(BLECharacteristic *pCharacteristic) {
+  // MINIMAL WORK IN CALLBACK - BLE stack has limited stack space!
+  // Just buffer data and set flags; all processing happens in loop()
+
+  std::string value = pCharacteristic->getValue();
+  if (value.empty()) {
+    return;
+  }
+
+  const uint8_t *data = reinterpret_cast<const uint8_t *>(value.data());
+  size_t length = value.length();
+
+  _lastWriteTime = millis();
+  _pendingData = true; // Flag for loop() to process
+
+  // Detect new BitChat clients by checking connection count
+  // (This is a heuristic - actual connection tracking is done via SharedBLEServer)
+  BLEServer *server = BLEDevice::getServer();
+  if (server) {
+    uint8_t currentCount = server->getConnectedCount();
+    if (currentCount > _bitchatClientCount) {
+      _bitchatClientCount = currentCount;
+    }
+  }
+
+  // Append to write buffer with overflow protection
+  size_t copyLen = length;
+  if (_writeBufferOffset + copyLen > sizeof(_writeBuffer)) {
+    // Buffer overflow - clear and start fresh
+    clearWriteBuffer();
+    if (copyLen > sizeof(_writeBuffer)) {
+      copyLen = sizeof(_writeBuffer);
+    }
+  }
+
+  memcpy(&_writeBuffer[_writeBufferOffset], data, copyLen);
+  _writeBufferOffset += copyLen;
+
+  Serial.printf("[BitChat BLE] onWrite: buffered %zu bytes (total %zu)\n", copyLen, _writeBufferOffset);
+}
+
+void BitchatBLEService::onRead(BLECharacteristic *pCharacteristic) {
+  // Currently unused - reads return the last written value
+  // No processing here - BLE callback has limited stack
+}
+
+void BitchatBLEService::onNotify(BLECharacteristic *pCharacteristic) {
+  // Notification was sent successfully
+  // Can be used for tracking if needed
+}
+
+void BitchatBLEService::onStatus(BLECharacteristic *pCharacteristic, Status s, uint32_t code) {
+  // Handle status changes (e.g., indicate confirmations)
+  // s values: SUCCESS_INDICATE, SUCCESS_NOTIFY, ERROR_NOTIFY_INDICATE_DISABLED, etc.
+  if (s == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) {
+    // Notification sent successfully
+  } else if (s == BLECharacteristicCallbacks::Status::ERROR_NOTIFY_INDICATE_DISABLED) {
+    Serial.println("[BitChat BLE] Notify/Indicate disabled - client not subscribed");
+  }
+}
+#endif
 
 #ifdef NRF52_PLATFORM
 bool BitchatBLEService::initNRF52(const char *deviceName) {

@@ -147,7 +147,11 @@ struct PeerInfo {
 /**
  * BitChat BLE Service
  */
+#ifdef ESP32
+class BitchatBLEService : public BLEServiceWrapper, public BLECharacteristicCallbacks {
+#else
 class BitchatBLEService : public BLEServiceWrapper {
+#endif
 public:
   static constexpr size_t MAX_MESSAGE_QUEUE = 8;
   static constexpr size_t PEER_CACHE_SIZE = 32;
@@ -217,6 +221,23 @@ public:
 
   // Main loop - call periodically
   void loop();
+
+#ifdef ESP32
+  /**
+   * @brief Initialize ESP32 BLE service
+   * This must be called AFTER BLEDevice::init() and BLEServer creation
+   * (typically by SerialBLEInterface)
+   * @param deviceName Device name for advertising
+   * @return true if initialization successful
+   */
+  bool initESP32(const char *deviceName);
+
+  /**
+   * @brief Get the ESP32 BLEService object
+   * @return Pointer to the BLEService object, or nullptr if not initialized
+   */
+  BLEService *getESP32Service() { return _platformService; }
+#endif
 
 #ifdef NRF52_PLATFORM
   /**
@@ -322,6 +343,14 @@ private:
   size_t serializeMessage(const BitchatMessage &msg, uint8_t *buffer, size_t maxLen);
   bool parseMessage(const uint8_t *data, size_t len, BitchatMessage &msg);
   bool parseAnnounceTLV(const uint8_t *payload, size_t len, char *nickname, size_t nickLen, uint8_t *pubKey);
+
+#ifdef ESP32
+  // ESP32 BLECharacteristicCallbacks
+  void onWrite(BLECharacteristic *pCharacteristic) override;
+  void onRead(BLECharacteristic *pCharacteristic) override;
+  void onNotify(BLECharacteristic *pCharacteristic) override;
+  void onStatus(BLECharacteristic *pCharacteristic, Status s, uint32_t code) override;
+#endif
 };
 
 } // namespace ble

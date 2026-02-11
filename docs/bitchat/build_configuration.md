@@ -94,11 +94,46 @@ build_flags =
 
 ### ESP32 Platform
 
+ESP32 supports BitChat through the `BitchatBLEService` class which attaches to the existing BLE server managed by `SerialBLEInterface`.
+
 ```ini
 build_flags =
     -D ENABLE_BITCHAT=1
     -D ESP32
     -D BITCHAT_SUPPORT_COEXISTENCE=1  ; Can support simultaneous services
+```
+
+#### ESP32 BLE Initialization
+
+On ESP32, BitChat integrates with the existing BLE stack:
+
+```cpp
+// In main.cpp - ESP32 initialization flow
+#ifdef ENABLE_BITCHAT
+  // Initialize BitChat bridge
+  bitchat_bridge.begin();
+  
+  // Attach to existing BLE server
+  if (serial_interface.getBLEServer() != nullptr) {
+    mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
+    bitchatService.initESP32(the_mesh.getNodeName());
+    serial_interface.setBitChatService(bitchatService.getESP32Service());
+  }
+  
+  the_mesh.initBitchat(&bitchat_bridge);
+#endif
+```
+
+#### ESP32 Mode Switching
+
+ESP32 supports runtime mode switching between MeshCore and BitChat:
+
+```cpp
+// Switch to BitChat mode
+serial_interface.setBitChatMode(true);
+
+// Switch back to MeshCore mode
+serial_interface.setBitChatMode(false);
 ```
 
 #### ESP32 Memory Considerations
@@ -110,6 +145,16 @@ build_flags =
 | Total with BitChat | ~880KB | ~125KB |
 
 **ESP32 Limits**: 4MB+ Flash, 520KB RAM
+
+#### ESP32 vs nRF52 Differences
+
+| Feature | ESP32 | nRF52 |
+|---------|-------|-------|
+| BLE Stack | ESP-IDF NimBLE | Nordic SoftDevice |
+| Service Creation | `initESP32()` attaches to existing server | `initNRF52()` creates standalone |
+| Mode Switching | `setBitChatMode()` changes advertisement | Menu-based switching |
+| MTU Handling | Automatic | Manual negotiation |
+| Security | Open (BitChat) / PIN (MeshCore) | Open (BitChat) / PIN (MeshCore) |
 
 ## Debug Configuration
 
