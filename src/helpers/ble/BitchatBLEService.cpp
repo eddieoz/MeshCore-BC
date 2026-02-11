@@ -810,7 +810,9 @@ void BitchatBLEService::processAnnounce(const BitchatMessage &msg) {
     Serial.printf("[ANNOUNCE_DEBUG] processAnnounce: parseAnnounceTLV success, nickname=%s\n", nickname);
 
     // Sync clock from announcer if timestamp looks valid (BitChat app sends current Unix time)
-    if (msg.timestamp > 1700000000000ULL) {
+    // 1730000000000 = ~Oct 27 2024
+    if (msg.timestamp > 1730000000000ULL) {
+      Serial.printf("[BitChat BLE] Syncing time from announcement: %llu\n", msg.timestamp);
       syncTime(msg.timestamp);
     }
 

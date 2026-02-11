@@ -154,9 +154,7 @@ private:
   uint32_t _messagesRelayed;
   uint32_t _duplicatesDropped;
 
-  // Time synchronization
-  int64_t _timeOffset;
-  bool _timeSynced;
+  // Time synchronization handled by BitchatBLEService directly
 
   // Message guard
   bool _processingMessage;

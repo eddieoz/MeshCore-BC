@@ -71,8 +71,8 @@ static void ed25519_pk_to_curve25519(uint8_t *curve25519_pub, const uint8_t *ed2
 
 BitchatBridge::BitchatBridge(mesh::Mesh &mesh, mesh::LocalIdentity &identity, const char *nodeName)
     : _mesh(mesh), _identity(identity), _nodeName(nodeName), _initialized(false), _bitchatPeerId(0),
-      _messagesRelayed(0), _duplicatesDropped(0), _timeOffset(0), _timeSynced(false),
-      _processingMessage(false), _hasMeshChannel(false), _decapsulator(_channelRegistry) {
+      _messagesRelayed(0), _duplicatesDropped(0), _processingMessage(false), _hasMeshChannel(false),
+      _decapsulator(_channelRegistry) {
   memset(_noisePublicKey, 0, sizeof(_noisePublicKey));
   memset(&_meshChannel, 0, sizeof(_meshChannel));
 }
@@ -195,7 +195,18 @@ void BitchatBridge::loop() {
       bMsg.version = BITCHAT_VERSION;
       bMsg.type = BITCHAT_MSG_MESSAGE;
       bMsg.ttl = 8;
-      bMsg.timestamp = getCurrentTimeMs();
+      // Dynamic Time Sync: use bleService time which is now synced from both Messages and Announcements
+      uint64_t baseTime = getCurrentTimeMs();
+
+      // Check for valid time (if > 2024 it's likely synced or at least using the updated fallback)
+      if (baseTime > 1700000000000ULL) {
+        Serial.printf("[BitChat] Using time: %llu\n", baseTime);
+      } else {
+        // Should not happen as BitchatBLEService has a fallback, but just in case
+        Serial.printf("[BitChat] Warning: Time seems invalid: %llu\n", baseTime);
+      }
+
+      bMsg.timestamp = baseTime;
 
       // Split 64-bit print to avoid printf issues on some platforms
       uint32_t tsHi = (uint32_t)(bMsg.timestamp >> 32);
@@ -268,12 +279,13 @@ void BitchatBridge::loop() {
   if (now - lastAnnounceTime >= 5000) {
     lastAnnounceTime = now;
 
-    // Calculate synthetic Unix time: 1770760000 is approx Feb 10 2026 21:46 UTC (updated for testing)
-    // Adding millis()/1000 gives us a moving timestamp that is "recent enough"
-    uint64_t unixTime = 1770760000ULL + (now / 1000ULL);
+    // Use synced time from BitchatBLEService (synced via incoming announcements from phone)
+    // getCurrentTimeMs() returns milliseconds; sendAnnouncement expects seconds
+    uint64_t currentMs = getCurrentTimeMs();
+    uint64_t unixTime = currentMs / 1000ULL;
 
-    Serial.printf("[BitChat] Sending announcement with timestamp: %lu (now=%lu)\n", (unsigned long)unixTime,
-                  now);
+    Serial.printf("[BitChat] Sending announcement with timestamp: %lu (synced_ms=%llu)\n",
+                  (unsigned long)unixTime, currentMs);
 
     // Ensure service has latest keys
     _bleService.setPublicKeys(_noisePublicKey, _identity.pub_key);
@@ -427,6 +439,9 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
   }
 
   _processingMessage = true;
+
+  // Time Sync: Now handled by BitchatBLEService automatically for both Messages and Announcements
+  // which updates its internal clock via syncTime()
 
   // Handle different message types
   Serial.printf("[BitChat] onBitchatMessageReceived: type=%d, payloadLen=%d\n", msg.type, msg.payloadLength);
