@@ -9,11 +9,11 @@
 #define FIRMWARE_VER_CODE 8
 
 #ifndef FIRMWARE_BUILD_DATE
-#define FIRMWARE_BUILD_DATE "29 Jan 2026"
+#define FIRMWARE_BUILD_DATE "11 Fev 2026"
 #endif
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "v1.12.0.1"
+#define FIRMWARE_VERSION "v1.12.0+bc"
 #endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
@@ -143,8 +143,8 @@ protected:
                            const uint8_t *sender_prefix, const char *text) override;
   void onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packet *pkt, uint32_t timestamp,
                             const char *text) override;
-  void onGroupDataRecv(mesh::Packet* packet, uint8_t type, const mesh::GroupChannel& channel, 
-                       uint8_t* data, size_t len) override;
+  void onGroupDataRecv(mesh::Packet *packet, uint8_t type, const mesh::GroupChannel &channel, uint8_t *data,
+                       size_t len) override;
 
   uint8_t onContactRequest(const ContactInfo &contact, uint32_t sender_timestamp, const uint8_t *data,
                            uint8_t len, uint8_t *reply) override;
@@ -178,23 +178,23 @@ public:
   void savePrefs() { _store->savePrefs(_prefs, sensors.node_lat, sensors.node_lon); }
 
   // BitChat support methods
-  const uint8_t* getPublicKey() const { return self_id.pub_key; }
-  mesh::GroupChannel* findChannelByHash(uint8_t channelHash);
-  mesh::GroupChannel* findChannelByName(const char* name);
-  bool sendGroupData(mesh::GroupChannel& channel, const uint8_t* data, size_t len, 
-                     uint32_t timestamp, const char* senderName);
+  const uint8_t *getPublicKey() const { return self_id.pub_key; }
+  mesh::GroupChannel *findChannelByHash(uint8_t channelHash);
+  mesh::GroupChannel *findChannelByName(const char *name);
+  bool sendGroupData(mesh::GroupChannel &channel, const uint8_t *data, size_t len, uint32_t timestamp,
+                     const char *senderName);
 
 #ifdef ENABLE_BITCHAT
   // Initialize BitChat bridge (Story 10.4)
-  void initBitchat(BitchatBridge* bridge);
-  
+  void initBitchat(BitchatBridge *bridge);
+
   // Initialize #mesh channel when switching to BitChat mode
   // Returns true if channel was initialized successfully
   bool initBitchatMeshChannel();
 #endif
 
   // Story 4: Add hashtag channel (public channel with SHA256-derived secret)
-  void addHashtagChannel(const char* name);
+  void addHashtagChannel(const char *name);
 
 private:
   void writeOKFrame();
@@ -228,7 +228,7 @@ private:
   AbstractUITask *_ui;
 
 #ifdef ENABLE_BITCHAT
-  BitchatBridge* _bitchatBridge;  // BitChat bridge instance (Story 10.4)
+  BitchatBridge *_bitchatBridge; // BitChat bridge instance (Story 10.4)
 #endif
 
   ContactsIterator _iter;
