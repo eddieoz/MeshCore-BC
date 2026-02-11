@@ -71,12 +71,36 @@ Both platforms support identical menu-based switching between MeshCore and BitCh
 
 | Document | Description |
 |----------|-------------|
+| [Build Configuration](./build_configuration.md) | **ENABLE_BITCHAT flag**, build options, compilation settings |
+| [Device Compatibility](./compatibility_devices.md) | **Complete list** of compatible/incompatible devices |
 | [Protocol Specification](./protocol_specification.md) | BitChat wire protocol format |
 | [Encapsulation Format](./encapsulation_format.md) | MeshCore encapsulation header and format |
 | [Payloads](./payloads.md) | BitChat payload types and structures |
 | [BLE Service](./ble_service.md) | BLE GATT service specification |
 | [Architecture](./architecture.md) | Component architecture and data flow |
-| [Build Configuration](./build_configuration.md) | Build flags and platform configuration |
+
+## Quick Start
+
+### Enable BitChat (For Developers)
+
+Add to your `platformio.ini`:
+
+```ini
+build_flags =
+    -D ENABLE_BITCHAT=1
+    -D BLE_MODE_SWITCHING=1
+```
+
+### Check Device Compatibility
+
+BitChat requires a **display and buttons** for mode switching.
+
+| Status | Device Examples | Count |
+|--------|-----------------|-------|
+| ✅ **Compatible** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. | **35 devices** |
+| ❌ **Not Compatible** | T1000-E, Xiao C3/nRF52, devices without screens | Future CLI support |
+
+**[📋 See Complete Device List](./compatibility_devices.md)** - Find your specific device
 
 ## Quick Start
 

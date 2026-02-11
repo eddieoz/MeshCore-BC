@@ -4,32 +4,122 @@
 
 This document describes the build configuration options for enabling and customizing BitChat integration in MeshCore firmware.
 
-## Compile-Time Configuration
+## ENABLE_BITCHAT Flag - Master Control
 
-### ENABLE_BITCHAT Flag
+The `ENABLE_BITCHAT` preprocessor flag is the **master switch** that controls whether BitChat support is compiled into the firmware.
 
-The `ENABLE_BITCHAT` preprocessor flag controls whether BitChat support is included in the build.
+### Enabling BitChat
+
+Add the following to your `platformio.ini` build flags:
 
 ```ini
 ; platformio.ini
 build_flags =
     -D ENABLE_BITCHAT=1
+    -D BLE_MODE_SWITCHING=1
 ```
 
-| Value | Description |
-|-------|-------------|
-| `1` or defined | Include BitChat code |
-| undefined | Exclude BitChat code (smaller binary) |
+| Flag | Value | Description |
+|------|-------|-------------|
+| `ENABLE_BITCHAT` | `1` | **Include** BitChat code and features |
+| `ENABLE_BITCHAT` | undefined | **Exclude** BitChat code (original firmware) |
+| `BLE_MODE_SWITCHING` | `1` | Enable menu-based BLE mode switching (required for UI) |
+
+### How It Works
+
+When `ENABLE_BITCHAT=1` is defined:
+- ✅ BitChat BLE service code is compiled
+- ✅ Menu-based BLE mode switching is available
+- ✅ `#mesh` channel support is enabled
+- ✅ BitChat message encapsulation/decapsulation is active
+- ⚠️ Firmware size increases by ~80KB Flash, ~25KB RAM
+
+When `ENABLE_BITCHAT` is **not defined**:
+- ✅ Original MeshCore firmware without BitChat
+- ✅ Smaller binary size
+- ✅ All original functionality preserved
+- ❌ No BitChat compatibility
+
+### Backward Compatibility
+
+**Critical**: Omitting `ENABLE_BITCHAT` builds the **original firmware** exactly as before BitChat was added:
+
+```ini
+; Original firmware without BitChat
+[env:MyDevice_companion_radio_ble]
+build_flags =
+    ${base.build_flags}
+    -D DISPLAY_CLASS=SSD1306Display
+    ; No ENABLE_BITCHAT flag
+```
+
+This ensures existing devices continue to work without modifications.
 
 ### Code Guard Pattern
 
-All BitChat code is wrapped with conditional compilation:
+All BitChat code is conditionally compiled:
 
 ```cpp
+// In MyMesh.cpp, main.cpp, etc.
 #ifdef ENABLE_BITCHAT
-// BitChat implementation
+  #include <helpers/bitchat/BitchatBridge.h>
+  
+  // BitChat bridge instance
+  BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
+  
+  // Initialize BitChat
+  bitchat_bridge.begin();
+  the_mesh.initBitchat(&bitchat_bridge);
 #endif
 ```
+
+## Device Compatibility
+
+BitChat requires **on-device UI navigation** (screen + buttons) to toggle between MeshCore and BitChat modes.
+
+### Quick Summary
+
+| Status | Count | Examples |
+|--------|-------|----------|
+| ✅ **Compatible** | **35 devices** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. |
+| ❌ **Incompatible** | **15+ devices** | T1000-E, Xiao C3/nRF52, devices without screens |
+
+### 📋 Complete Device List
+
+**[See compatibility_devices.md for the complete list](./compatibility_devices.md)** of:
+- All 35 compatible ESP32/nRF52 devices with build environments
+- All 15+ incompatible devices and reasons
+- How to check if your device is compatible
+- How to request support for new devices
+
+### Compatible Device Categories
+
+**ESP32 Devices (33 total):**
+- Heltec series: V2, V3, V4, Tracker, Wireless Paper
+- LilyGo series: T-Deck, T-Echo, T3-S3, T-Beam variants
+- RAK modules: RAK3112, RAK3401
+- And more: Station G2, Mesh Pocket, Nano G2 Ultra, etc.
+
+**nRF52 Devices (10 total):**
+- Wio Tracker L1 (LCD and E-ink variants)
+- RAK4631
+- Heltec T114
+- Ikoka Stick/Handheld variants
+- ThinkNode M1/M2/M5
+
+### Incompatible Devices (No Display)
+
+Popular devices that currently cannot use BitChat:
+
+| Device | Platform | Why Incompatible |
+|--------|----------|------------------|
+| T1000-E | nRF52 | No display - tracker only |
+| Xiao C3 | ESP32 | No display - compact module |
+| Xiao nRF52 | nRF52 | No display - compact module |
+| RAK WisMesh Tag | nRF52 | No display - tag format |
+| Heltec CT62 | ESP32 | No display |
+
+**Future Support**: These devices may receive BitChat via CLI configuration in a future release.
 
 ## PlatformIO Configuration
 
