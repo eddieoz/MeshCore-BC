@@ -164,6 +164,7 @@ public:
   bool getContactByIdx(uint32_t idx, ContactInfo& contact);
   ContactsIterator startContactsIterator();
   ChannelDetails* addChannel(const char* name, const char* psk_base64);
+  ChannelDetails* addHashtagChannel(const char* name, const uint8_t* secret, uint8_t secret_len);
   bool getChannel(int idx, ChannelDetails& dest);
   bool setChannel(int idx, const ChannelDetails& src);
   int findChannelIdx(const mesh::GroupChannel& ch);

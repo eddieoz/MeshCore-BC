@@ -131,6 +131,7 @@ void BaseChatMesh::onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id, 
     plen = packet->writeTo(temp_buf);
     packet->header = save;
   }
+  putBlobByKey(id.pub_key, PUB_KEY_SIZE, temp_buf, plen);
 
   bool is_new = false; // true = not in contacts[], false = exists in contacts[]
   if (from == NULL) {
@@ -156,7 +157,6 @@ void BaseChatMesh::onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id, 
     from->shared_secret_valid = false;
   }
   // update
-    putBlobByKey(id.pub_key, PUB_KEY_SIZE, temp_buf, plen);
     StrHelper::strncpy(from->name, parser.getName(), sizeof(from->name));
     from->type = parser.getType();
     if (parser.hasLatLon()) {
@@ -798,6 +798,20 @@ ChannelDetails* BaseChatMesh::addChannel(const char* name, const char* psk_base6
       num_channels++;
       return dest;
     }
+  }
+  return NULL;
+}
+
+ChannelDetails* BaseChatMesh::addHashtagChannel(const char* name, const uint8_t* secret, uint8_t secret_len) {
+  if (num_channels < MAX_GROUP_CHANNELS && secret_len <= 32) {
+    auto dest = &channels[num_channels];
+
+    memset(dest->channel.secret, 0, sizeof(dest->channel.secret));
+    memcpy(dest->channel.secret, secret, secret_len);
+    mesh::Utils::sha256(dest->channel.hash, sizeof(dest->channel.hash), dest->channel.secret, secret_len);
+    StrHelper::strncpy(dest->name, name, sizeof(dest->name));
+    num_channels++;
+    return dest;
   }
   return NULL;
 }

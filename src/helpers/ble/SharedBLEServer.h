@@ -22,8 +22,10 @@
 #include <vector>
 #include <algorithm>
 
-// Platform-specific includes
-#ifdef ESP32
+// Platform-specific includes (use mocks for native tests)
+#ifdef NATIVE_TEST
+  #include "MockBLE.h"
+#elif defined(ESP32)
   #include <BLEDevice.h>
   #include <BLEServer.h>
   #include <BLEService.h>
