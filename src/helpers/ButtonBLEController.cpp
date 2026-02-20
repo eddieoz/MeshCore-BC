@@ -5,6 +5,11 @@
 
 #include "Button.h"  // From ui-orig folder (included in build path)
 
+// Include buzzer header at top level (not inside function)
+#ifdef PIN_BUZZER
+#include "buzzer.h"
+#endif
+
 // LED blink timing
 #define MESHCORE_BLINK_INTERVAL_MS  500  // Slow blink for MeshCore (500ms on/off)
 #define BITCHAT_BLINK_INTERVAL_MS   150  // Fast blink for BitChat (150ms on/off)
@@ -142,9 +147,6 @@ void ButtonBLEController::playModeTone(bool bitChatMode) {
     pinMode(PIN_BUZZER_EN, OUTPUT);
     digitalWrite(PIN_BUZZER_EN, HIGH);
     #endif
-    
-    // Include the buzzer header
-    #include "buzzer.h"
     
     // Play appropriate tone
     if (bitChatMode) {
