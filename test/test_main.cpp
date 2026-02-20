@@ -327,6 +327,16 @@ int main(int argc, char **argv) {
   RUN_TEST(test::bitchat::test_mesh_to_bitchat_loop_prevention);
   RUN_TEST(test::bitchat::test_mesh_to_bitchat_skips_bitchat_origin_prefix);
   RUN_TEST(test::bitchat::test_bridge_loop_processing);
+  // computeChannelHash — routing byte
+  RUN_TEST(test::bitchat::test_compute_channel_hash_produces_correct_routing_byte);
+  RUN_TEST(test::bitchat::test_compute_channel_hash_deterministic);
+  RUN_TEST(test::bitchat::test_compute_channel_hash_different_secrets_differ);
+  // onMeshcoreEncapsulatedMessage — component path
+  RUN_TEST(test::bitchat::test_encapsulated_message_decapsulates_with_mesh_key);
+  RUN_TEST(test::bitchat::test_encapsulated_non_bitchat_packet_rejected);
+  // derivePeerId — wrapper behaviour
+  RUN_TEST(test::bitchat::test_derive_peer_id_null_key_returns_zero);
+  RUN_TEST(test::bitchat::test_derive_peer_id_unique_per_key);
 
   UNITY_END();
 

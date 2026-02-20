@@ -31,10 +31,14 @@
 
 #ifdef ENABLE_BITCHAT
 
+#include "helpers/bitchat/BitchatIdentity.h"
 #include "helpers/bitchat/BitchatMessageEncapsulator.h"
 #include "helpers/bitchat/ChannelRegistry.h"
 #include "helpers/bitchat/LoopPrevention.h"
 #include "helpers/bitchat/MessageDecapsulator.h"
+
+// SHA256 available via ed25519 lib in native_test (same as BitchatIdentity.cpp)
+extern "C" void sha256_hash(const uint8_t *data, size_t len, uint8_t out[32]);
 
 namespace test {
 namespace bitchat {
@@ -324,6 +328,189 @@ void test_bridge_loop_processing() {
   uint8_t bad_pkt[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00 };
   TEST_ASSERT_FALSE_MESSAGE(dec.isBitChatEncapsulated(bad_pkt, sizeof(bad_pkt)),
                             "Non-BitChat packet was wrongly accepted as a BitChat-encapsulated packet.");
+}
+
+// ============================================================
+// computeChannelHash — routing byte consistency
+// ============================================================
+
+/**
+ * @test SHA256 of the #mesh channel secret first byte must equal 0xB0.
+ *
+ * BitchatBridge::computeChannelHash() is a thin wrapper over Utils::sha256().
+ * The bridge hardcodes hash[0] = 0xB0 in initMeshChannel(), so this test
+ * verifies that the SHA256 of the #mesh secret actually produces 0xB0 as its
+ * first byte — if not, the hardcoded value is wrong and packet routing breaks.
+ */
+void test_compute_channel_hash_produces_correct_routing_byte() {
+  // BRIDGE_TEST_MESH_KEY is SHA256("#mesh") first 16 bytes.
+  // Computing SHA256 of that 16-byte secret should give a hash whose first
+  // byte is 0xB0 — the value used as the MeshCore routing hash in initMeshChannel().
+  uint8_t hash[32] = {};
+  sha256_hash(BRIDGE_TEST_MESH_KEY, 16, hash);
+
+  TEST_ASSERT_EQUAL_MESSAGE(0xB0, hash[0],
+                            "SHA256(#mesh_secret)[0] != 0xB0. The hardcoded routing byte in "
+                            "initMeshChannel() is wrong — packets will never be routed to the bridge.");
+}
+
+/**
+ * @test computeChannelHash is deterministic — same input always gives same output.
+ */
+void test_compute_channel_hash_deterministic() {
+  uint8_t hash1[32] = {};
+  uint8_t hash2[32] = {};
+  sha256_hash(BRIDGE_TEST_MESH_KEY, 16, hash1);
+  sha256_hash(BRIDGE_TEST_MESH_KEY, 16, hash2);
+
+  TEST_ASSERT_EQUAL_MEMORY_MESSAGE(hash1, hash2, 32,
+                                   "Repeated SHA256 computation produced different results. "
+                                   "Hash function is not deterministic.");
+}
+
+/**
+ * @test computeChannelHash for different secret inputs produces different hashes.
+ *
+ * Prevents a degenerate implementation (e.g., zero-fill) from passing the
+ * routing byte test above by coincidence.
+ */
+void test_compute_channel_hash_different_secrets_differ() {
+  const uint8_t other_secret[16] = { 0xAA, 0xBB, 0xCC, 0xDD, 0x00, 0x11, 0x22, 0x33,
+                                     0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB };
+  uint8_t hash_mesh[32] = {};
+  uint8_t hash_other[32] = {};
+  sha256_hash(BRIDGE_TEST_MESH_KEY, 16, hash_mesh);
+  sha256_hash(other_secret, 16, hash_other);
+
+  TEST_ASSERT_NOT_EQUAL_MESSAGE(hash_mesh[0], hash_other[0],
+                                "SHA256 of different secrets produced the same first hash byte. "
+                                "Routing would be ambiguous between channels.");
+}
+
+// ============================================================
+// onMeshcoreEncapsulatedMessage — component path
+// ============================================================
+
+/**
+ * @test onMeshcoreEncapsulatedMessage: a pre-encapsulated BitChat packet is
+ *       decapsulatable with the #mesh channel key via MessageDecapsulator.
+ *
+ * The bridge's onMeshcoreEncapsulatedMessage() calls:
+ *   1. Build EncapsulatedPacket from raw bytes
+ *   2. _decapsulator.decapsulate(packet, channel.secret, result)
+ *   3. If SUCCESS: _bleService.sendBitchatMessage(result.message)
+ *
+ * This test verifies step 2 — that a well-formed BitChat-encapsulated
+ * packet can be decapsulated with the #mesh key, so a received MeshCore
+ * encapsulated message would be correctly decoded and forwarded to BLE.
+ */
+void test_encapsulated_message_decapsulates_with_mesh_key() {
+  // Create a valid BitChat message
+  mesh::ble::BitchatMessage original;
+  memset(&original, 0, sizeof(original));
+  original.version = BITCHAT_VERSION;
+  original.type = BITCHAT_MSG_MESSAGE;
+  original.ttl = 3;
+  original.setSenderId64(0xABCDEF0123456789ULL);
+  const char *txt = "encapsulated relay test";
+  memcpy(original.payload, txt, strlen(txt));
+  original.payloadLength = (uint16_t)strlen(txt);
+
+  // Encapsulate it (as the sending MeshCore node would)
+  mesh::bitchat::BitchatMessageEncapsulator enc;
+  mesh::bitchat::EncapsulatedPacket pkt;
+  bool encoded = enc.encapsulate(original, BRIDGE_TEST_MESH_KEY, pkt);
+  TEST_ASSERT_TRUE_MESSAGE(encoded, "Failed to create test encapsulated packet.");
+
+  // onMeshcoreEncapsulatedMessage() calls _decapsulator.decapsulate()
+  // Test that component directly (mandatory, since we can't call the bridge method)
+  mesh::bitchat::ChannelRegistry registry;
+  registry.registerDefaultMeshChannel();
+  mesh::bitchat::MessageDecapsulator dec(registry);
+
+  mesh::bitchat::DecapsulationResult result;
+  bool ok = dec.decapsulate(pkt, BRIDGE_TEST_MESH_KEY, result);
+
+  TEST_ASSERT_TRUE_MESSAGE(ok, "MessageDecapsulator::decapsulate() failed for a valid #mesh-encoded packet. "
+                               "onMeshcoreEncapsulatedMessage() would silently drop the message.");
+
+  TEST_ASSERT_EQUAL_MESSAGE(
+      (int)mesh::bitchat::DecapsulationStatus::SUCCESS, (int)result.status,
+      "Decapsulation status was not SUCCESS. Bridge would not forward the message to BitChat.");
+
+  TEST_ASSERT_EQUAL_MESSAGE(original.payloadLength, result.message.payloadLength,
+                            "Decapsulated message payload length mismatch.");
+  TEST_ASSERT_EQUAL_MEMORY_MESSAGE(original.payload, result.message.payload, original.payloadLength,
+                                   "Decapsulated message payload content mismatch.");
+}
+
+/**
+ * @test onMeshcoreEncapsulatedMessage: a garbage/non-BC packet is rejected.
+ *
+ * If random noise or a non-BitChat MeshCore packet arrives as an encapsulated
+ * message, it must not be forwarded to BitChat.  isBitChatEncapsulated() must
+ * catch it before decapsulation is even attempted.
+ */
+void test_encapsulated_non_bitchat_packet_rejected() {
+  mesh::bitchat::ChannelRegistry registry;
+  registry.registerDefaultMeshChannel();
+  mesh::bitchat::MessageDecapsulator dec(registry);
+
+  // Random noise with no BC magic
+  uint8_t garbage[] = { 0x00, 0xFF, 0x42, 0x13, 0xDE, 0xAD, 0xBE, 0xEF };
+  mesh::bitchat::EncapsulatedPacket pkt;
+  memcpy(pkt.data, garbage, sizeof(garbage));
+  pkt.length = sizeof(garbage);
+  pkt.isValid = true;
+
+  TEST_ASSERT_FALSE_MESSAGE(dec.isBitChatEncapsulated(pkt.data, pkt.length),
+                            "Garbage packet without BC magic was accepted as a BitChat-encapsulated packet. "
+                            "onMeshcoreEncapsulatedMessage() would try to relay noise to BitChat.");
+}
+
+// ============================================================
+// derivePeerId — bridge wrapper behaviour
+// ============================================================
+
+/**
+ * @test deriveBitChatPeerId() returns 0 for a null key (null guard).
+ *
+ * BitchatBridge::derivePeerId() calls deriveBitChatPeerId().
+ * The underlying function must guard against null input to avoid a crash
+ * in onBitchatMessageReceived() which calls this during startup.
+ */
+void test_derive_peer_id_null_key_returns_zero() {
+  uint64_t id = mesh::bitchat::deriveBitChatPeerId(nullptr);
+  TEST_ASSERT_EQUAL_MESSAGE(0ULL, id,
+                            "deriveBitChatPeerId(nullptr) did not return 0. "
+                            "A null pubkey would cause a crash or undefined behavior in the bridge.");
+}
+
+/**
+ * @test deriveBitChatPeerId() returns a unique, non-zero ID for a valid key.
+ *
+ * Two different public keys must produce different peer IDs — otherwise two
+ * MeshCore devices would appear as the same BitChat peer.
+ */
+void test_derive_peer_id_unique_per_key() {
+  const uint8_t keyA[32] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
+                             0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+                             0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20 };
+
+  const uint8_t keyB[32] = { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x01, 0x02, 0x03, 0x04, 0x05,
+                             0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+                             0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A };
+
+  uint64_t idA = mesh::bitchat::deriveBitChatPeerId(keyA);
+  uint64_t idB = mesh::bitchat::deriveBitChatPeerId(keyB);
+
+  TEST_ASSERT_NOT_EQUAL_MESSAGE(0ULL, idA,
+                                "deriveBitChatPeerId returned 0 for a valid key. "
+                                "Bridge would report itself as unidentified in BitChat.");
+
+  TEST_ASSERT_NOT_EQUAL_MESSAGE(idA, idB,
+                                "Two different public keys produced the same peer ID. "
+                                "Two MeshCore devices would appear identical in the BitChat app.");
 }
 
 } // namespace bitchat
