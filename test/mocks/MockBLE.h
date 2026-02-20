@@ -10,6 +10,9 @@
 #include <functional>
 #include <cstring>
 
+// Include Arduino mock for millis() and other Arduino functions
+#include "Arduino.h"
+
 // Mock BLE UUID
 class MockBLEUUID {
 public:
@@ -139,7 +142,7 @@ public:
 // Mock service classes are defined in test files that need them, after proper
 // includes of SharedBLEServer.h which defines BLEServiceWrapper.
 
-#if 0  // Disabled - define mocks in test files instead to avoid circular deps
+#if 0  // Disabled - mock services defined in separate test helper
 namespace mesh {
 namespace ble {
 
@@ -305,6 +308,3 @@ public:
 // Global Serial instance for native tests
 #define MOCK_BLE_H_SERIAL_DEFINED
 inline MockSerial Serial;
-
-// Mock millis() function for native tests
-inline uint32_t millis() { return 0; }

@@ -22,8 +22,3 @@ public:
   size_t println(int n) { return print(n) + 1; }
   size_t println() { return 1; }
 };
-
-// Only declare Serial if not already defined by MockBLE.h
-#ifndef MOCK_BLE_H_SERIAL_DEFINED
-extern Stream Serial;
-#endif

@@ -11,6 +11,7 @@
 // Mock BLE classes for testing (when hardware not available)
 #ifdef NATIVE_TEST
   #include "../mocks/MockBLE.h"
+  #include "test_mock_services.h"
 #else
   // Real hardware test
   #include <BLEDevice.h>

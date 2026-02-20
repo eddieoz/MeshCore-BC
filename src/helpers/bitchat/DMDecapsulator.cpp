@@ -53,8 +53,8 @@ bool DMDecapsulator::decapsulateDM(const EncapsulatedPacket &packet, uint64_t se
   // uint8_t decrypted[BITCHAT_MAX_PAYLOAD_SIZE + BITCHAT_HEADER_SIZE];
   uint8_t *decrypted = _decryptionBuffer;
 
-  if (payloadLen > sizeof(decrypted)) {
-    payloadLen = sizeof(decrypted);
+  if (payloadLen > sizeof(_decryptionBuffer)) {
+    payloadLen = sizeof(_decryptionBuffer);
   }
 
   decryptPayload(&packet.data[BITCHAT_ENCAPSULATION_HEADER_SIZE], payloadLen, recipientKey, decrypted);

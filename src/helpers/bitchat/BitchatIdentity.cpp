@@ -1,7 +1,13 @@
 #include "BitchatIdentity.h"
 
-#include "../../MeshCore.h"
-#include "../../Utils.h"
+#ifdef NATIVE_TEST
+  // Use SHA256 implementation from test/mocks/sha256_impl.c
+  extern "C" void sha256_hash(const uint8_t *data, size_t len, uint8_t out[32]);
+  #include "../test/mocks/sha256_impl.c"
+#else
+  #include "../../MeshCore.h"
+  #include "../../Utils.h"
+#endif
 
 #ifdef ENABLE_BITCHAT
 
@@ -15,7 +21,11 @@ uint64_t deriveBitChatPeerId(const uint8_t *ed25519PubKey) {
 
   // BitChat uses the first 8 bytes of the SHA-256 hash of the public key
   uint8_t hash[32];
+#ifdef NATIVE_TEST
+  sha256_hash(ed25519PubKey, 32, hash);
+#else
   mesh::Utils::sha256(hash, sizeof(hash), ed25519PubKey, 32);
+#endif
 
   // Interpret first 8 bytes as a little-endian uint64_t
   // This ensures that when serialized back to bytes, it matches the original hash order
