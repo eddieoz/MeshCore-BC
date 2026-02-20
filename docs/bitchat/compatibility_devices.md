@@ -65,9 +65,26 @@ These devices have displays and buttons for menu-based BLE mode switching.
 
 *Note: Some nRF52 variants have multiple build environments for different power levels*
 
-## Incompatible Devices (No Display)
+## Button-Only Devices (No Display)
 
-These devices **cannot** use BitChat menu switching due to lack of screen/buttons. They may receive CLI-based configuration in a future release.
+These devices use **button-based mode switching** (5x press) with LED/buzzer feedback instead of menu navigation. See [Button BLE Controller](../button_ble_controller.md) for details.
+
+### nRF52 (Button-Only)
+
+| # | Device | Variant | Button | LED | Buzzer | Build Environment |
+|---|--------|---------|--------|-----|--------|-------------------|
+| 1 | **T1000-E** | `t1000-e` | ✓ | ✓ Green | ✓ | `t1000e_companion_radio_ble` |
+| 2 | **RAK WisMesh Tag** | `rak_wismesh_tag` | ✓ | ✓ RGB | ✓ | Planned |
+| 3 | MinewSemi ME25LS01 | `minewsemi_me25ls01` | ✓ | ✓ RGB | ✗ | Planned |
+
+**Usage:** Press the button 5 times rapidly to toggle between MeshCore and BitChat modes.
+- 3 slow LED blinks = MeshCore mode
+- 3 fast LED blinks = BitChat mode
+- Different buzzer tones for audio feedback (if available)
+
+## Incompatible Devices (No Display/No Button)
+
+These devices **cannot** currently use BitChat due to lack of screen and buttons. They may receive CLI-based configuration in a future release.
 
 ### ESP32 (No Display)
 
@@ -78,7 +95,6 @@ These devices **cannot** use BitChat menu switching due to lack of screen/button
 | Heltec Wireless Paper (USB only) | `heltec_wireless_paper` | Some variants no display |
 | SenseCap Indicator ESPNow | `sensecap_indicator-espnow` | ESPNow only |
 | SenseCap Solar | `sensecap_solar` | No display |
-| T1000-E | `t1000-e` | Tracker, no display |
 | Xiao C3 | `xiao_c3` | Compact, no display |
 
 ### nRF52 (No Display)
@@ -87,8 +103,6 @@ These devices **cannot** use BitChat menu switching due to lack of screen/button
 |--------|---------|--------|
 | Heltec T114 (No Display) | `Heltec_t114_without_display` | Variant without screen |
 | Ikoka Nano nRF | `ikoka_nano_nrf` | Compact, no display |
-| MinewSemi ME25LS01 | `minewsemi_me25ls01` | Beacon, no display |
-| RAK WisMesh Tag | `rak_wismesh_tag` | Tag/tracker, no display |
 | Wio WM1110 | `wio_wm1110` | Compact module |
 | Xiao nRF52 | `xiao_nrf52` | Compact, no display |
 
@@ -144,16 +158,15 @@ If your device has a display and buttons but is not listed:
 
 ## Future Support for Display-Less Devices
 
-Devices without displays may receive BitChat support through:
+Devices without displays or buttons may receive BitChat support through:
 
 - **CLI Configuration**: `bitchat enable` command via serial
 - **Startup Mode**: Default to BitChat mode on boot
 - **Companion App**: Configure via USB/BLE from phone
 
 Planned for future releases. Priority will be given to popular devices like:
-- T1000-E
 - Xiao series
-- RAK WisMesh Tag
+- Heltec Mesh Solar
 
 ## See Also
 

@@ -106,6 +106,19 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
 BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
 #endif
 
+// ButtonBLEController for button-only devices (no display, but with button and BLE)
+// Enables quintuple-press mode switching with LED/buzzer feedback
+#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
+#include <helpers/ButtonBLEController.h>
+ButtonBLEController button_ble_controller(&serial_interface);
+#elif defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
+// Check if using NullDisplayDriver (display-less device with DISPLAY_CLASS defined)
+#if defined(NullDisplayDriver)
+#include <helpers/ButtonBLEController.h>
+ButtonBLEController button_ble_controller(&serial_interface);
+#endif
+#endif
+
 /* END GLOBAL OBJECTS */
 
 void halt() {
@@ -289,6 +302,14 @@ void setup() {
 #ifdef DISPLAY_CLASS
   ui_task.begin(disp, &sensors, the_mesh.getNodePrefs());  // still want to pass this in as dependency, as prefs might be moved
 #endif
+
+// Initialize ButtonBLEController for button-only BLE devices
+#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && defined(PIN_USER_BTN)
+#if !defined(DISPLAY_CLASS) || defined(NullDisplayDriver)
+  button_ble_controller.begin();
+  Serial.println("[Main] ButtonBLEController initialized for button-only mode switching");
+#endif
+#endif
 }
 
 void loop() {
@@ -297,5 +318,13 @@ void loop() {
 #ifdef DISPLAY_CLASS
   ui_task.loop();
 #endif
+
+// Update ButtonBLEController for button-only BLE devices
+#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && defined(PIN_USER_BTN)
+#if !defined(DISPLAY_CLASS) || defined(NullDisplayDriver)
+  button_ble_controller.loop();
+#endif
+#endif
+
   rtc_clock.tick();
 }
