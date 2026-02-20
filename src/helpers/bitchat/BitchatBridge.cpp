@@ -19,7 +19,7 @@
 
 // Crypto headers for BitChat integration
 #ifndef NATIVE_TEST
-  #include <Crypto.h>
+#include <Crypto.h>
 #endif
 
 // For key conversion
@@ -76,8 +76,8 @@ static void ed25519_pk_to_curve25519(uint8_t *curve25519_pub, const uint8_t *ed2
 
 BitchatBridge::BitchatBridge(mesh::Mesh &mesh, mesh::LocalIdentity &identity, const char *nodeName)
     : _mesh(mesh), _identity(identity), _nodeName(nodeName), _initialized(false), _bitchatPeerId(0),
-      _messagesRelayed(0), _duplicatesDropped(0), _privacyDrops(0), _processingMessage(false), _hasMeshChannel(false),
-      _hasMeshSecret(false), _decapsulator(_channelRegistry) {
+      _messagesRelayed(0), _duplicatesDropped(0), _privacyDrops(0), _processingMessage(false),
+      _hasMeshChannel(false), _hasMeshSecret(false), _decapsulator(_channelRegistry) {
   memset(_noisePublicKey, 0, sizeof(_noisePublicKey));
   memset(&_meshChannel, 0, sizeof(_meshChannel));
   memset(_meshChannelSecret, 0, sizeof(_meshChannelSecret));
@@ -113,6 +113,14 @@ void BitchatBridge::begin() {
 
   // Register the default #mesh channel
   _channelRegistry.registerDefaultMeshChannel();
+
+  // CRITICAL: Pre-initialize the #mesh GroupChannel so we can relay BitChat→MeshCore
+  // messages immediately without waiting for an incoming MeshCore group message.
+  // Previously, _hasMeshChannel was only set to true when onMeshcoreGroupMessage()
+  // was first called (i.e., when a MeshCore user sent a message to #mesh). This
+  // meant that if the user switched to BitChat mode before any MeshCore message arrived,
+  // any message from BitChat would be silently dropped.
+  initMeshChannel();
 
   _initialized = true;
 }
@@ -301,7 +309,7 @@ void BitchatBridge::onMeshcoreGroupMessage(const mesh::GroupChannel &channel, ui
   // Cache the channel for outgoing messages
   // IMPORTANT: Only copy hash[0], don't overwrite our secret!
   if (!_hasMeshChannel) {
-    _meshChannel.hash[0] = channel.hash[0];  // Only copy 1 byte (PATH_HASH_SIZE)
+    _meshChannel.hash[0] = channel.hash[0]; // Only copy 1 byte (PATH_HASH_SIZE)
     // Secret should already be set from initMeshChannel()
     _hasMeshChannel = true;
     Serial.println("[BitChat] Cached mesh channel hash for outgoing messages");
@@ -385,7 +393,7 @@ void BitchatBridge::onBitchatMessageReceived(const mesh::ble::BitchatMessage &ms
   if (!_initialized) {
     return;
   }
-  
+
   if (_processingMessage) {
     return;
   }
@@ -512,11 +520,9 @@ void BitchatBridge::signBitChatMessage(mesh::ble::BitchatMessage &msg) {
 // Hardcoded to avoid memory corruption issues during SHA256 computation
 void BitchatBridge::computeMeshSecret() {
   // Hardcoded secret for #mesh channel (first 16 bytes of SHA256("#mesh"))
-  const uint8_t MESH_SECRET[16] = {
-    0x5B, 0x66, 0x4C, 0xDE, 0x0B, 0x08, 0xB2, 0x20,
-    0x61, 0x21, 0x13, 0xDB, 0x98, 0x06, 0x50, 0xF3
-  };
-  
+  const uint8_t MESH_SECRET[16] = { 0x5B, 0x66, 0x4C, 0xDE, 0x0B, 0x08, 0xB2, 0x20,
+                                    0x61, 0x21, 0x13, 0xDB, 0x98, 0x06, 0x50, 0xF3 };
+
   memcpy(_meshChannelSecret, MESH_SECRET, 16);
   _hasMeshSecret = true;
 }
@@ -538,17 +544,17 @@ bool BitchatBridge::initMeshChannel() {
 
   // Initialize the channel structure
   memset(&_meshChannel, 0, sizeof(_meshChannel));
-  
+
   // Copy the secret (16 bytes) - note: GroupChannel.secret is 32 bytes (PUB_KEY_SIZE)
   // but MeshCore hashtag channels use first 16 bytes of SHA256 as the secret
   memcpy(_meshChannel.secret, _meshChannelSecret, 16);
-  
+
   // Hardcoded channel hash (first byte only - PATH_HASH_SIZE = 1)
   // MeshCore only uses the first byte of hash for routing
-  _meshChannel.hash[0] = 0xB0;  // First byte of SHA256(secret)
-  
+  _meshChannel.hash[0] = 0xB0; // First byte of SHA256(secret)
+
   _hasMeshChannel = true;
-  
+
   return true;
 }
 

@@ -313,14 +313,19 @@ int main(int argc, char **argv) {
   RUN_TEST(test::bitchat::test_integration_loop_prevention);
   RUN_TEST(test::bitchat::test_integration_channel_routing);
 
-  // Run all tests from Story 10.1 (BitchatBridge)
+  // Run all tests from Story 10.1 (BitchatBridge — both relay directions)
+  // BitChat → MeshCore
   RUN_TEST(test::bitchat::test_bridge_initialization);
-  RUN_TEST(test::bitchat::test_bridge_bitchat_to_mesh);
-  RUN_TEST(test::bitchat::test_bridge_mesh_to_bitchat);
-  RUN_TEST(test::bitchat::test_bridge_loop_prevention);
-  RUN_TEST(test::bitchat::test_bridge_handles_non_bitchat);
-  RUN_TEST(test::bitchat::test_bridge_unknown_channel_routes_to_mesh);
-  RUN_TEST(test::bitchat::test_bridge_ble_service_access);
+  RUN_TEST(test::bitchat::test_mesh_channel_ready_after_begin); // REGRESSION guard (channel secret)
+  RUN_TEST(test::bitchat::test_bitchat_message_relayed_to_mesh_after_begin); // REGRESSION guard (encap+relay)
+
+  RUN_TEST(test::bitchat::test_multiple_bitchat_messages_each_relayed);
+  RUN_TEST(test::bitchat::test_init_mesh_channel_idempotent);
+  // MeshCore → BitChat
+  RUN_TEST(test::bitchat::test_mesh_to_bitchat_accepts_mesh_channel_msg);
+  RUN_TEST(test::bitchat::test_mesh_to_bitchat_drops_non_mesh_channel);
+  RUN_TEST(test::bitchat::test_mesh_to_bitchat_loop_prevention);
+  RUN_TEST(test::bitchat::test_mesh_to_bitchat_skips_bitchat_origin_prefix);
   RUN_TEST(test::bitchat::test_bridge_loop_processing);
 
   UNITY_END();
