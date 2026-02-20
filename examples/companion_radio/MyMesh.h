@@ -12,7 +12,7 @@
 #endif
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "v1.13.0"
+#define FIRMWARE_VERSION "v1.13.0+bc"
 #endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
@@ -69,6 +69,11 @@
 
 #include <helpers/BaseChatMesh.h>
 #include <helpers/TransportKeyStore.h>
+
+// ENABLE_BITCHAT support - Forward declaration to avoid circular dependency
+#ifdef ENABLE_BITCHAT
+class BitchatBridge;
+#endif
 
 /* -------------------------------------------------------------------------------------- */
 
@@ -160,6 +165,25 @@ protected:
 public:
   void savePrefs() { _store->savePrefs(_prefs, sensors.node_lat, sensors.node_lon); }
 
+  // BitChat support methods
+  const uint8_t *getPublicKey() const { return self_id.pub_key; }
+  mesh::GroupChannel *findChannelByHash(uint8_t channelHash);
+  mesh::GroupChannel *findChannelByName(const char *name);
+  bool sendGroupData(mesh::GroupChannel &channel, const uint8_t *data, size_t len, uint32_t timestamp,
+                     const char *senderName);
+
+#ifdef ENABLE_BITCHAT
+  // Initialize BitChat bridge (Story 10.4)
+  void initBitchat(BitchatBridge *bridge);
+
+  // Initialize #mesh channel when switching to BitChat mode
+  // Returns true if channel was initialized successfully
+  bool initBitchatMeshChannel();
+#endif
+
+  // Story 4: Add hashtag channel (public channel with SHA256-derived secret)
+  void addHashtagChannel(const char *name);
+
 private:
   void writeOKFrame();
   void writeErrFrame(uint8_t err_code);
@@ -191,6 +215,10 @@ private:
   uint32_t pending_req;   // pending _BINARY_REQ
   BaseSerialInterface *_serial;
   AbstractUITask* _ui;
+
+#ifdef ENABLE_BITCHAT
+  BitchatBridge *_bitchatBridge; // BitChat bridge instance (Story 10.4)
+#endif
 
   ContactsIterator _iter;
   uint32_t _iter_filter_since;

@@ -3,6 +3,10 @@
 #include <Arduino.h> // needed for PlatformIO
 #include <Mesh.h>
 
+#ifdef ENABLE_BITCHAT
+#include <helpers/bitchat/BitchatBridge.h>
+#endif
+
 #define CMD_APP_START                 1
 #define CMD_SEND_TXT_MSG              2
 #define CMD_SEND_CHANNEL_TXT_MSG      3
@@ -506,6 +510,36 @@ void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uin
 
 void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packet *pkt, uint32_t timestamp,
                                   const char *text) {
+#ifdef ENABLE_BITCHAT
+  // Forward to BitChat bridge if available (Story 10.4)
+  // Extract sender name from "sender: message" format
+  if (_bitchatBridge != nullptr) {
+    Serial.println("[BitChat] Routing MeshCore channel message to bridge");
+    const char *colonPos = strchr(text, ':');
+    if (colonPos != nullptr && colonPos > text) {
+      // Use static buffer to reduce stack usage in callback chain
+      static char senderName[32];
+      size_t senderLen = colonPos - text;
+      if (senderLen >= sizeof(senderName)) senderLen = sizeof(senderName) - 1;
+      memcpy(senderName, text, senderLen);
+      senderName[senderLen] = '\0';
+
+      const char *msgText = colonPos + 1;
+      while (*msgText == ' ')
+        msgText++; // Skip leading space
+
+      Serial.printf("[BitChat] Relaying from %s: %s\n", senderName, msgText);
+      _bitchatBridge->onMeshcoreGroupMessage(channel, timestamp, senderName, msgText);
+    } else {
+      // No colon found, use whole text
+      Serial.printf("[BitChat] Relaying (no sender): %s\n", text);
+      _bitchatBridge->onMeshcoreGroupMessage(channel, timestamp, "Unknown", text);
+    }
+    Serial.println("[BitChat] Bridge call completed");
+    yield(); // Allow FreeRTOS scheduler to run
+  }
+#endif
+
   int i = 0;
   if (app_target_ver >= 3) {
     out_frame[i++] = RESP_CODE_CHANNEL_MSG_RECV_V3;
@@ -531,7 +565,16 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
   i += tlen;
   addToOfflineQueue(out_frame, i);
 
-  if (_serial->isConnected()) {
+  // CRITICAL: Skip MeshCore serial operations when in BitChat mode
+  // The MeshCore companion app is not connected in BitChat mode, and calling
+  // _serial->isConnected() can cause BLE stack conflicts with concurrent BitChat callbacks
+#ifdef ENABLE_BITCHAT
+  bool skipSerial = (_bitchatBridge != nullptr && _serial->isBitChatMode());
+#else
+  bool skipSerial = false;
+#endif
+
+  if (!skipSerial && _serial->isConnected()) {
     uint8_t frame[1];
     frame[0] = PUSH_CODE_MSG_WAITING; // send push 'tickle'
     _serial->writeFrame(frame, 1);
@@ -785,7 +828,11 @@ void MyMesh::onSendTimeout() {}
 
 MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMeshTables &tables, DataStore& store, AbstractUITask* ui)
     : BaseChatMesh(radio, *new ArduinoMillis(), rng, rtc, *new StaticPoolPacketManager(16), tables),
-      _serial(NULL), telemetry(MAX_PACKET_PAYLOAD - 4), _store(&store), _ui(ui) {
+      _serial(NULL), telemetry(MAX_PACKET_PAYLOAD - 4), _store(&store), _ui(ui)
+#ifdef ENABLE_BITCHAT
+      , _bitchatBridge(nullptr)
+#endif
+{
   _iter_started = false;
   _cli_rescue = false;
   offline_queue_len = 0;
@@ -809,6 +856,32 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
   _prefs.gps_enabled = 0;       // GPS disabled by default
   _prefs.gps_interval = 0;      // No automatic GPS updates by default
   //_prefs.rx_delay_base = 10.0f;  enable once new algo fixed
+}
+
+void MyMesh::addHashtagChannel(const char* name) {
+#ifdef MAX_GROUP_CHANNELS
+  // Derive secret from hashtag: first 16 bytes of SHA256("#<name>")
+  // Per MeshCore spec: https://github.com/jkingsman/meshcore-packet-knife
+  char hashtag[33];
+  snprintf(hashtag, sizeof(hashtag), "#%s", name);
+  
+  uint8_t secret[16];  // First 16 bytes of SHA256
+  // Use SHA256 and take first 16 bytes for the secret
+  uint8_t sha256_result[32];
+  mesh::Utils::sha256(sha256_result, 32, (uint8_t*)hashtag, strlen(hashtag));
+  memcpy(secret, sha256_result, 16);  // First 16 bytes only
+  
+  // Use BaseChatMesh's public method to add the channel (16-byte secret)
+  ChannelDetails* dest = BaseChatMesh::addHashtagChannel(name, secret, 16);
+  
+  if (dest != NULL) {
+    Serial.printf("[MyMesh] Added hashtag channel: %s\n", name);
+  } else {
+    Serial.printf("[MyMesh] Cannot add hashtag channel '%s': channel table full\n", name);
+  }
+#else
+  (void)name; // suppress unused warning
+#endif
 }
 
 void MyMesh::begin(bool has_display) {
@@ -871,6 +944,7 @@ void MyMesh::begin(bool has_display) {
   _store->loadContacts(this);
   bootstrapRTCfromContacts();
   addChannel("Public", PUBLIC_GROUP_PSK); // pre-configure Andy's public channel
+  addHashtagChannel("mesh");
   _store->loadChannels(this);
 
   radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
@@ -2002,6 +2076,12 @@ void MyMesh::loop() {
     checkSerialInterface();
   }
 
+#ifdef ENABLE_BITCHAT
+  if (_bitchatBridge != nullptr) {
+    _bitchatBridge->loop();
+  }
+#endif
+
   // is there are pending dirty contacts write needed?
   if (dirty_contacts_expiry && millisHasNowPassed(dirty_contacts_expiry)) {
     saveContacts();
@@ -2012,6 +2092,85 @@ void MyMesh::loop() {
   if (_ui) _ui->setHasConnection(_serial->isConnected());
 #endif
 }
+
+// BitChat support: Static storage for found channel
+static mesh::GroupChannel s_foundChannel;
+
+// BitChat support: Find channel by hash
+mesh::GroupChannel *MyMesh::findChannelByHash(uint8_t channelHash) {
+#ifdef MAX_GROUP_CHANNELS
+  // Use the public search API to find matching channels
+  mesh::GroupChannel found[4];
+  uint8_t hash[1] = { channelHash };
+  int n = searchChannelsByHash(hash, found, 4);
+  if (n > 0) {
+    // Copy to static storage and return pointer
+    s_foundChannel = found[0];
+    return &s_foundChannel;
+  }
+#endif
+  return nullptr;
+}
+
+// BitChat support: Find channel by name
+mesh::GroupChannel *MyMesh::findChannelByName(const char *name) {
+#ifdef MAX_GROUP_CHANNELS
+  ChannelDetails details;
+  for (int i = 0; i < MAX_GROUP_CHANNELS; i++) {
+    if (getChannel(i, details)) {
+      if (strcmp(details.name, name) == 0) {
+        s_foundChannel = details.channel;
+        return &s_foundChannel;
+      }
+    }
+  }
+#endif
+  return nullptr;
+}
+
+// BitChat support: Send raw group data (with BC header)
+bool MyMesh::sendGroupData(mesh::GroupChannel &channel, const uint8_t *data, size_t len, uint32_t timestamp,
+                           const char *senderName) {
+  // Create buffer with timestamp prefix + data
+  uint8_t temp[4 + MAX_PACKET_PAYLOAD];
+  if (len + 4 > sizeof(temp)) {
+    return false; // too large
+  }
+
+  memcpy(temp, &timestamp, 4); // timestamp prefix
+  memcpy(temp + 4, data, len); // data including BC header
+
+  auto pkt = createGroupDatagram(PAYLOAD_TYPE_GRP_DATA, channel, temp, 4 + len);
+  if (pkt) {
+    sendFloodScoped(channel, pkt);
+    return true;
+  }
+  return false;
+}
+
+// ============================================================
+// BitChat Support Methods (Story 10.4)
+// ============================================================
+
+#ifdef ENABLE_BITCHAT
+void MyMesh::initBitchat(BitchatBridge *bridge) {
+  _bitchatBridge = bridge;
+}
+
+bool MyMesh::initBitchatMeshChannel() {
+  Serial.println("[MyMesh] initBitchatMeshChannel() called");
+  
+  if (_bitchatBridge == nullptr) {
+    Serial.println("[MyMesh] ERROR: Cannot init mesh channel - bridge not initialized");
+    return false;
+  }
+  
+  // Initialize the #mesh channel in the bridge
+  bool result = _bitchatBridge->initMeshChannel();
+  Serial.printf("[MyMesh] initMeshChannel result: %s\n", result ? "SUCCESS" : "FAILED");
+  return result;
+}
+#endif
 
 bool MyMesh::advert() {
   mesh::Packet* pkt;

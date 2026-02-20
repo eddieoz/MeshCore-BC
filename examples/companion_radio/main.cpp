@@ -99,6 +99,13 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
    #endif
 );
 
+// BitChat bridge - instantiated with mesh and identity references
+// This follows Story 10.2 architecture
+#if defined(ENABLE_BITCHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+#include <helpers/bitchat/BitchatBridge.h>
+BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
+#endif
+
 /* END GLOBAL OBJECTS */
 
 void halt() {
@@ -152,8 +159,40 @@ void setup() {
 
 #ifdef BLE_PIN_CODE
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
+
+  // Initialize BitChat bridge for nRF52
+  #ifdef ENABLE_BITCHAT
+  Serial.println("[BitChat] Initializing bridge...");
+  bitchat_bridge.begin();
+  Serial.println("[BitChat] Bridge begin() called");
+  
+  // For nRF52: Add BitChat BLE service to existing Bluefruit instance
+  Serial.println("[BitChat] nRF52 platform detected, initializing BLE service...");
+  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("[BitChat] BLE service initialized");
+    // Store BitChat service for mode switching
+    mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
+    serial_interface.setBitChatService(&bitchatService.getNRF52Service());
+    Serial.println("[BitChat] Service registered for mode switching");
+  } else {
+    Serial.println("[BitChat] ERROR: BLE service initialization failed");
+  }
+  
+  the_mesh.initBitchat(&bitchat_bridge);
+  Serial.println("[BitChat] Bridge fully initialized and registered with mesh");
+  #endif
 #else
   serial_interface.begin(Serial);
+
+  #ifdef ENABLE_BITCHAT
+  Serial.println("Initializing BitChat bridge...");
+  bitchat_bridge.begin();
+  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("BitChat BLE service started (standalone mode)");
+  }
+  the_mesh.initBitchat(&bitchat_bridge);
+  Serial.println("BitChat bridge initialized");
+  #endif
 #endif
   the_mesh.startInterface(serial_interface);
 #elif defined(RP2040_PLATFORM)
@@ -199,12 +238,46 @@ void setup() {
   serial_interface.begin(TCP_PORT);
 #elif defined(BLE_PIN_CODE)
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
+
+  // Initialize BitChat bridge for ESP32
+  #ifdef ENABLE_BITCHAT
+  Serial.println("[BitChat] Initializing bridge...");
+  bitchat_bridge.begin();
+  Serial.println("[BitChat] Bridge begin() called");
+  
+  // For ESP32: BitChat attaches to existing BLE server
+  Serial.println("[BitChat] ESP32 platform detected, initializing BLE service...");
+  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("[BitChat] BLE service initialized");
+    // Store BitChat service for mode switching
+    mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
+    bitchatService.initESP32(the_mesh.getNodeName());
+    serial_interface.setBitChatService(bitchatService.getESP32Service());
+    Serial.println("[BitChat] Service registered for mode switching");
+  } else {
+    Serial.println("[BitChat] ERROR: BLE service initialization failed");
+  }
+  
+  the_mesh.initBitchat(&bitchat_bridge);
+  Serial.println("[BitChat] Bridge fully initialized and registered with mesh");
+  #endif
 #elif defined(SERIAL_RX)
   companion_serial.setPins(SERIAL_RX, SERIAL_TX);
   companion_serial.begin(115200);
   serial_interface.begin(companion_serial);
 #else
   serial_interface.begin(Serial);
+
+  // Initialize BitChat bridge for ESP32 (standalone mode)
+  #ifdef ENABLE_BITCHAT
+  Serial.println("[BitChat] Initializing bridge (standalone mode)...");
+  bitchat_bridge.begin();
+  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("[BitChat] BLE service started (standalone mode)");
+  }
+  the_mesh.initBitchat(&bitchat_bridge);
+  Serial.println("[BitChat] Bridge initialized");
+  #endif
 #endif
   the_mesh.startInterface(serial_interface);
 #else
