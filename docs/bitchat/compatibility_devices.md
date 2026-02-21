@@ -67,7 +67,7 @@ These devices have displays and buttons for menu-based BLE mode switching.
 
 ## Button-Only Devices (No Display)
 
-These devices use **button-based mode switching** (5x press) with LED/buzzer feedback instead of menu navigation. The mode switching is handled by UITask's quintuple press handler (not a separate controller). See [Button BLE Controller](../button_ble_controller.md) for details.
+These devices use **button-based mode switching** (5x press) with LED/buzzer feedback instead of menu navigation. The mode switching is handled by UITask's quintuple press handler (not a separate controller). See [Button BLE Controller](./button_ble_controller.md) for details.
 
 ### nRF52 (Button-Only)
 

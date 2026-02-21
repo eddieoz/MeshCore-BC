@@ -1,4 +1,98 @@
-## About MeshCore
+# BitChat Integration for MeshCore
+
+## Overview
+
+The BitChat integration enables MeshCore devices to communicate with the BitChat Android app through a bridge layer that translates between BitChat protocol and MeshCore mesh networking. This is an **additive feature** that preserves all existing MeshCore functionality while adding BitChat compatibility.
+
+## Key Principles
+
+1. **Additive, Not Substitutive**: BitChat support is added alongside MeshCore, not replacing it
+2. **No Infrastructure Changes**: Repeaters and room servers require no modifications
+3. **Encapsulation Strategy**: BitChat messages are encapsulated in standard MeshCore packets
+4. **Backward Compatible**: Existing MeshCore nodes continue to work normally
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            MeshCore Device                               │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────────────────────┐    ┌────────────────────────────────┐  │
+│  │    WITH DISPLAY (Menu)      │    │     BUTTON-ONLY (T1000-E)      │  │
+│  │   ┌─────────────────────┐   │    │   ┌────────────────────────┐   │  │
+│  │   │   BITCHAT Page      │   │    │   │   5x Button Press      │   │  │
+│  │   │  ┌─────┐  ┌─────┐   │   │    │   │   (Quintuple)          │   │  │
+│  │   │  │  M  │  │  B  │   │   │    │   │  ┌──────────────────┐  │   │  │
+│  │   │  │Mesh │  │BitC │   │   │    │   │  │ LED: 3 blinks    │  │   │  │
+│  │   │  └──┬──┘  └──┬──┘   │   │    │   │  │ Buzzer: tone     │  │   │  │
+│  │   │     └────┬───┘      │   │    │   │  └────────┬─────────┘  │   │  │
+│  │   └──────────┼──────────┘   │    │   └───────────┼────────────┘   │  │
+│  └──────────────┼──────────────┘    └───────────────┼────────────────┘  │
+│                 │                                   │                    │
+│                 └───────────────────┬───────────────┘                    │
+│                                     ▼                                    │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                    SerialBLEInterface                               │ │
+│  │  • MeshCore UART Service (6E400001-B5A3-F393-E0A9-E50E24DCCA9E)    │ │
+│  │  • BitChat Service (F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C)        │ │
+│  │  • Only ONE service advertised at a time                           │ │
+│  │  • Auto-disconnects clients on mode switch                         │ │
+│  │  • PIN auth (MeshCore) / Open access (BitChat)                    │ │
+│  └────────────────────────────────┬───────────────────────────────────┘ │
+│                                   │                                      │
+│                       ┌───────────▼────────────┐                        │
+│                       │    BitchatBridge       │                        │
+│                       │  • Encapsulate         │──► MeshCore GRP/TXT    │
+│                       │  • Decapsulate         │◄── BC magic header     │
+│                       │  • Loop prevention     │                        │
+│                       └───────────┬────────────┘                        │
+│                                   │                                      │
+│                       ┌───────────▼────────────┐                        │
+│                       │       MyMesh           │                        │
+│                       │     (MeshCore)         │                        │
+│                       └───────────┬────────────┘                        │
+│                                   │                                      │
+│                       ┌───────────▼────────────┐                        │
+│                       │     LoRa Radio         │                        │
+│                       │    (SX1262/etc)        │                        │
+│                       └────────────────────────┘                        │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### Platform Support
+
+| Feature | nRF52 | ESP32 |
+|---------|-------|-------|
+| Menu-based BLE mode switching | ✅ | ✅ |
+| Button-based BLE mode switching | ✅ | ✅ |
+| Visual mode indicator (M/B) | ✅ | ✅ |
+| LED/buzzer feedback (button-only) | ✅ | ✅ |
+| BitChat BLE service | ✅ | ✅ |
+| MeshCore UART service | ✅ | ✅ |
+| PIN authentication (MeshCore mode) | ✅ | ✅ |
+| Open access (BitChat mode) | ✅ | ✅ |
+
+### With Display (Menu-Based)
+Navigate to the **BITCHAT** page and press **ENTER** to toggle between modes. Display shows large **M** (MeshCore) or **B** (BitChat).
+
+### Button-Only (T1000-E)
+Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. See [Button-Based Mode Switching](docs/bitchat/button_ble_controller.md) for details.
+
+## Documentation Structure
+
+| Document | Description |
+|----------|-------------|
+| [Build Configuration](docs/bitchat/build_configuration.md) | **ENABLE_BITCHAT flag**, build options, compilation settings |
+| [Device Compatibility](docs/bitchat/compatibility_devices.md) | **Complete list** of compatible/incompatible devices |
+| [Button-Based Mode Switching](docs/bitchat/button_ble_controller.md) | T1000-E and button-only device guide |
+| [Protocol Specification](docs/bitchat/protocol_specification.md) | BitChat wire protocol format |
+| [Encapsulation Format](docs/bitchat/encapsulation_format.md) | MeshCore encapsulation header and format |
+| [Payloads](docs/bitchat/payloads.md) | BitChat payload types and structures |
+| [BLE Service](docs/bitchat/ble_service.md) | BLE GATT service specification |
+| [Architecture](docs/bitchat/architecture.md) | Component architecture and data flow |
+
+# About MeshCore
 
 MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
 

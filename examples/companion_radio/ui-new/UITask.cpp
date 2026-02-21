@@ -282,11 +282,22 @@ public:
       display.drawTextCentered(display.width() / 2, 64 - 11, "toggle: " PRESS_LABEL);
 #ifdef ENABLE_BITCHAT
     } else if (_page == HomePage::BITCHAT) {
-      display.setColor(_task->getSerial()->isBitChatMode() ? DisplayDriver::GREEN : DisplayDriver::RED);
-      display.setTextSize(2);
-      display.drawTextCentered(display.width() / 2, 30, "BitChat");
+      // Show current BLE mode with large letter (M for MeshCore, B for BitChat)
+      bool bitchatMode = _task->getSerial()->isBitChatMode();
+      display.setTextSize(3);
+      if (bitchatMode) {
+        display.setColor(DisplayDriver::GREEN);
+        display.drawTextCentered(display.width() / 2, 16, "B");
+        display.setTextSize(1);
+        display.drawTextCentered(display.width() / 2, 42, "BitChat");
+      } else {
+        display.setColor(DisplayDriver::RED);
+        display.drawTextCentered(display.width() / 2, 16, "M");
+        display.setTextSize(1);
+        display.drawTextCentered(display.width() / 2, 42, "MeshCore");
+      }
       display.setTextSize(1);
-      display.drawTextCentered(display.width() / 2, 64 - 11, "toggle: " PRESS_LABEL);
+      display.drawTextCentered(display.width() / 2, 54, "toggle: " PRESS_LABEL);
 #endif
     } else if (_page == HomePage::ADVERT) {
       display.setColor(DisplayDriver::GREEN);

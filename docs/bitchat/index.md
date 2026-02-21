@@ -14,44 +14,50 @@ The BitChat integration enables MeshCore devices to communicate with the BitChat
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         MeshCore Device                             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    BLE MODE MENU                             │   │
-│  │  ┌─────────────┐    ┌─────────────┐                         │   │
-│  │  │  MeshCore   │ or │   BitChat   │  (switchable)           │   │
-│  │  │    Mode     │◄──►│    Mode     │                         │   │
-│  │  │  (PIN auth) │    │  (no auth)  │                         │   │
-│  │  └──────┬──────┘    └──────┬──────┘                         │   │
-│  │         │                   │                                │   │
-│  │         └─────────┬─────────┘                                │   │
-│  │                   ▼                                          │   │
-│  │  ┌─────────────────────────────────────┐                     │   │
-│  │  │      SerialBLEInterface             │                     │   │
-│  │  │  • MeshCore UART (6E400001-...)    │                     │   │
-│  │  │  • BitChat Service (F47B5E2D-...)  │                     │   │
-│  │  │  • Only ONE active at a time       │                     │   │
-│  │  └────────────────┬──────────────────┘                     │   │
-│  └───────────────────┼──────────────────────────────────────────┘   │
-│                      │                                              │
-│              ┌───────▼────────┐                                    │
-│              │ BitchatBridge  │                                    │
-│              │ • Encapsulate  │──► MeshCore GRP_TXT/GRP_DATA       │
-│              │ • Decapsulate  │◄── BC magic header                  │
-│              │ • Loop prevent │                                    │
-│              └───────┬────────┘                                    │
-│                      │                                              │
-│              ┌───────▼────────┐                                    │
-│              │    MyMesh      │                                    │
-│              │  (MeshCore)    │                                    │
-│              └───────┬────────┘                                    │
-│                      │                                              │
-│              ┌───────▼────────┐                                    │
-│              │  LoRa Radio    │                                    │
-│              └────────────────┘                                    │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            MeshCore Device                               │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────────────────────┐    ┌────────────────────────────────┐  │
+│  │    WITH DISPLAY (Menu)      │    │     BUTTON-ONLY (T1000-E)      │  │
+│  │   ┌─────────────────────┐   │    │   ┌────────────────────────┐   │  │
+│  │   │   BITCHAT Page      │   │    │   │   5x Button Press      │   │  │
+│  │   │  ┌─────┐  ┌─────┐   │   │    │   │   (Quintuple)          │   │  │
+│  │   │  │  M  │  │  B  │   │   │    │   │  ┌──────────────────┐  │   │  │
+│  │   │  │Mesh │  │BitC │   │   │    │   │  │ LED: 3 blinks    │  │   │  │
+│  │   │  └──┬──┘  └──┬──┘   │   │    │   │  │ Buzzer: tone     │  │   │  │
+│  │   │     └────┬───┘      │   │    │   │  └────────┬─────────┘  │   │  │
+│  │   └──────────┼──────────┘   │    │   └───────────┼────────────┘   │  │
+│  └──────────────┼──────────────┘    └───────────────┼────────────────┘  │
+│                 │                                   │                    │
+│                 └───────────────────┬───────────────┘                    │
+│                                     ▼                                    │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                    SerialBLEInterface                               │ │
+│  │  • MeshCore UART Service (6E400001-B5A3-F393-E0A9-E50E24DCCA9E)    │ │
+│  │  • BitChat Service (F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C)        │ │
+│  │  • Only ONE service advertised at a time                           │ │
+│  │  • Auto-disconnects clients on mode switch                         │ │
+│  │  • PIN auth (MeshCore) / Open access (BitChat)                    │ │
+│  └────────────────────────────────┬───────────────────────────────────┘ │
+│                                   │                                      │
+│                       ┌───────────▼────────────┐                        │
+│                       │    BitchatBridge       │                        │
+│                       │  • Encapsulate         │──► MeshCore GRP/TXT    │
+│                       │  • Decapsulate         │◄── BC magic header     │
+│                       │  • Loop prevention     │                        │
+│                       └───────────┬────────────┘                        │
+│                                   │                                      │
+│                       ┌───────────▼────────────┐                        │
+│                       │       MyMesh           │                        │
+│                       │     (MeshCore)         │                        │
+│                       └───────────┬────────────┘                        │
+│                                   │                                      │
+│                       ┌───────────▼────────────┐                        │
+│                       │     LoRa Radio         │                        │
+│                       │    (SX1262/etc)        │                        │
+│                       └────────────────────────┘                        │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Platform Support
@@ -59,13 +65,19 @@ The BitChat integration enables MeshCore devices to communicate with the BitChat
 | Feature | nRF52 | ESP32 |
 |---------|-------|-------|
 | Menu-based BLE mode switching | ✅ | ✅ |
+| Button-based BLE mode switching | ✅ | ✅ |
 | Visual mode indicator (M/B) | ✅ | ✅ |
+| LED/buzzer feedback (button-only) | ✅ | ✅ |
 | BitChat BLE service | ✅ | ✅ |
 | MeshCore UART service | ✅ | ✅ |
 | PIN authentication (MeshCore mode) | ✅ | ✅ |
 | Open access (BitChat mode) | ✅ | ✅ |
 
-Both platforms support identical menu-based switching between MeshCore and BitChat BLE modes. Navigate to the **BLE_MODE** page and press **ENTER** to toggle between modes.
+### With Display (Menu-Based)
+Navigate to the **BITCHAT** page and press **ENTER** to toggle between modes. Display shows large **M** (MeshCore) or **B** (BitChat).
+
+### Button-Only (T1000-E)
+Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. See [Button-Based Mode Switching](./button_ble_controller.md) for details.
 
 ## Documentation Structure
 
@@ -73,6 +85,7 @@ Both platforms support identical menu-based switching between MeshCore and BitCh
 |----------|-------------|
 | [Build Configuration](./build_configuration.md) | **ENABLE_BITCHAT flag**, build options, compilation settings |
 | [Device Compatibility](./compatibility_devices.md) | **Complete list** of compatible/incompatible devices |
+| [Button-Based Mode Switching](./button_ble_controller.md) | T1000-E and button-only device guide |
 | [Protocol Specification](./protocol_specification.md) | BitChat wire protocol format |
 | [Encapsulation Format](./encapsulation_format.md) | MeshCore encapsulation header and format |
 | [Payloads](./payloads.md) | BitChat payload types and structures |
@@ -93,12 +106,13 @@ build_flags =
 
 ### Check Device Compatibility
 
-BitChat requires a **display and buttons** for mode switching.
+BitChat requires **either a display with buttons** OR **button-only with LED feedback** for mode switching.
 
 | Status | Device Examples | Count |
 |--------|-----------------|-------|
-| ✅ **Compatible** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. | **35 devices** |
-| ❌ **Not Compatible** | T1000-E, Xiao C3/nRF52, devices without screens | Future CLI support |
+| ✅ **Compatible (with display)** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. | **43 devices** |
+| ✅ **Compatible (button-only)** | T1000-E | **1 device** |
+| ❌ **Not Compatible** | Xiao C3/nRF52, devices without screens or buttons | Future CLI support |
 
 **[📋 See Complete Device List](./compatibility_devices.md)** - Find your specific device
 
@@ -114,22 +128,19 @@ pio run -e WioTrackerL1_companion_radio_ble
 
 ### Runtime Control
 
-```
-# Enable BitChat
-bitchat enable
+BitChat mode is controlled **on-device** via the UI or button presses:
 
-# Disable BitChat
-bitchat disable
+**With Display:**
+1. Navigate to **BITCHAT** page using LEFT/RIGHT buttons
+2. Press **ENTER** to toggle between MeshCore and BitChat modes
+3. Display shows large **M** (MeshCore) or **B** (BitChat)
 
-# Check status
-bitchat status
+**Button-Only (T1000-E):**
+1. Press user button **5 times rapidly** (within ~3 seconds)
+2. LED blinks 3 times (fast=BitChat 150ms, slow=MeshCore 500ms)
+3. Buzzer plays acknowledgment tone (if available)
 
-# List channels
-bitchat channel list
-
-# Add channel
-bitchat channel add mychannel 0xABCD...
-```
+**Note:** The device always boots in **MeshCore mode**. Mode is not persisted across reboots.
 
 ## Message Flow
 
@@ -186,10 +197,10 @@ See [Protocol Specification](./protocol_specification.md#hashtag-channels) for t
 Due to BLE advertising size constraints, both nRF52 and ESP32 platforms use **menu-based switching** rather than simultaneous services:
 
 **Navigation:**
-1. Use **LEFT/RIGHT** keys to navigate to the **BLE_MODE** page
+1. Use **LEFT/RIGHT** keys to navigate to the **BITCHAT** page
 2. Display shows:
    - **"M"** with "MeshCore" text → MeshCore mode active
-   - **""** with "BitChat" text → BitChat mode active
+   - **"B"** with "BitChat" text → BitChat mode active
 3. Press **ENTER** to toggle between modes
 
 **Platform-Specific Implementation:**

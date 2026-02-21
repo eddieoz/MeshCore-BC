@@ -11,14 +11,14 @@ The BitChat integration follows a layered architecture that separates BLE commun
 │                           APPLICATION LAYER                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐  │
-│  │   MeshCore App  │    │   BitChat App   │    │        CLI Interface     │  │
-│  │   (Android/iOS) │    │   (Android)     │    │        (Serial/USB)      │  │
-│  └────────┬────────┘    └────────┬────────┘    └────────────┬────────────┘  │
-│           │                      │                          │               │
-│           │ BLE (PIN auth)       │ BLE (open)               │ Commands      │
-│           │ 6E400001-...         │ F47B5E2D-...             │               │
-│           ▼                      ▼                          ▼               │
+│  ┌─────────────────┐    ┌─────────────────┐                              │
+│  │   MeshCore App  │    │   BitChat App   │                              │
+│  │   (Android/iOS) │    │   (Android)     │                              │
+│  └────────┬────────┘    └────────┬────────┘                              │
+│           │                      │                                      │
+│           │ BLE (PIN auth)       │ BLE (open)                           │
+│           │ 6E400001-...         │ F47B5E2D-...                         │
+│           ▼                      ▼                                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                           BRIDGE LAYER                                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -210,14 +210,6 @@ Persistent configuration storage:
 - Filesystem persistence
 - Auto-load on boot
 
-### BitchatCLI
-
-**File**: `src/helpers/bitchat/BitchatCLI.h/cpp`
-
-Command-line interface for BitChat control:
-- `bitchat enable/disable/status`
-- `bitchat channel add/remove/list`
-
 ## Data Flow
 
 ### BitChat → MeshCore
@@ -396,7 +388,8 @@ void onBLEWrite() {
 | BLE Callbacks | `BLECharacteristicCallbacks` | `BLECharacteristic::WriteCallback` | Stub |
 | Crypto | Hardware AES | Software | Stub |
 | Filesystem | SPIFFS | InternalFS | Mock |
-| Mode Switching | `setBitChatMode()` - UUID swap | Menu-based UUID swap | N/A |
+| Mode Switching (Menu) | `setBitChatMode()` - UUID swap | Menu-based UUID swap | N/A |
+| Mode Switching (Button) | `handleButtonQuintuplePress()` | `handleButtonQuintuplePress()` | N/A |
 
 ### ESP32 BLE Implementation
 
@@ -445,6 +438,37 @@ NRF52_PLATFORM          // nRF52-specific code
 ESP32                   // ESP32-specific code
 BLE_MODE_SWITCHING      // Enable menu-based BLE mode switching
 ```
+
+### Button-Based Mode Switching (T1000-E)
+
+For devices without displays (like T1000-E), mode switching is handled via button presses:
+
+```cpp
+// In UITask::handleButtonQuintuplePress()
+void handleButtonQuintuplePress() {
+    if (_serial) {
+        bool newBitChatMode = !_serial->isBitChatMode();
+        _serial->setBitChatMode(newBitChatMode);
+        
+        // LED feedback: 3 blinks
+        // Fast (150ms) = BitChat, Slow (500ms) = MeshCore
+        for (int i = 0; i < 3; i++) {
+            digitalWrite(LED_PIN, HIGH);
+            delay(newBitChatMode ? 150 : 500);
+            digitalWrite(LED_PIN, LOW);
+            delay(newBitChatMode ? 150 : 500);
+        }
+        
+        // Buzzer acknowledgment
+        notify(UIEventType::ack);
+    }
+}
+```
+
+**Button Action**: 5x rapid press (within ~3 seconds)
+**Feedback**:
+- LED: 3 blinks (fast = BitChat, slow = MeshCore)
+- Buzzer: Acknowledgment tone (if available)
 
 ### Runtime Configuration
 

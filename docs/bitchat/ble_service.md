@@ -2,7 +2,7 @@
 
 ## Overview
 
-The BitChat BLE Service provides a GATT interface for the BitChat Android app to communicate with MeshCore devices. This service operates independently from the MeshCore UART service and can be activated via menu-based switching on nRF52 platforms.
+The BitChat BLE Service provides a GATT interface for the BitChat Android app to communicate with MeshCore devices. This service operates independently from the MeshCore UART service and can be activated via **menu-based switching** (devices with displays) or **button-based switching** (T1000-E and button-only devices).
 
 ## Service UUID
 
@@ -42,21 +42,45 @@ MeshCore Mode          BitChat Mode
 ### Mode Selection Menu
 
 **Access via device UI:**
-1. Press **LEFT/RIGHT** to navigate to the **BLE_MODE** page
+1. Press **LEFT/RIGHT** to navigate to the **BITCHAT** page
 2. Display shows current mode:
    - **"M"** = MeshCore mode (Nordic UART service on nRF52, UART on ESP32)
    - **"B"** = BitChat mode (BitChat service)
 3. Press **ENTER** to toggle between modes
 4. Alert displays "MeshCore Mode" or "BitChat Mode" for 1 second
 
+### Button-Based Switching (T1000-E)
+
+For button-only devices without displays:
+
+**Action**: Press user button **5 times rapidly** (within ~3 seconds)
+
+**Feedback**:
+- LED: 3 blinks (fast 150ms = BitChat, slow 500ms = MeshCore)
+- Buzzer: Acknowledgment tone (if available)
+- Serial: "[BLE] Switched to BitChat/MeshCore mode"
+
 ### Platform-Specific Switching
 
 #### nRF52
 
-On nRF52, mode switching changes the advertised service UUID:
+On nRF52, mode switching disconnects clients and changes the advertised service UUID:
 
 ```cpp
+// Disconnect connected clients first
+if (Bluefruit.connected() > 0) {
+    for (uint8_t idx = 0; idx < Bluefruit.connected(); idx++) {
+        BLEConnection* conn = Bluefruit.Connection(idx);
+        if (conn && conn->connected()) {
+            conn->disconnect();
+        }
+    }
+    // Wait for disconnection to complete
+    delay(100);
+}
+
 // Bluefruit API
+Bluefruit.Advertising.stop();
 Bluefruit.Advertising.clearServices();
 if (bitchatMode) {
     Bluefruit.Advertising.addService(bitchatService);
@@ -75,6 +99,20 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
     if (_bitchatMode == enable) return;
     _bitchatMode = enable;
     
+    // Disconnect any connected clients before switching modes
+    // This ensures the connected smartphone immediately sees the mode change
+    if (pServer->getConnectedCount() > 0) {
+        // Disconnect all connected clients
+        for (int i = 0; i < pServer->getConnectedCount(); i++) {
+            uint16_t connId = pServer->getConnIdByIndex(0);
+            if (connId != BLE_HS_CONN_HANDLE_NONE) {
+                pServer->disconnect(connId);
+            }
+        }
+        // Wait for disconnection to complete
+        delay(100);
+    }
+    
     // Stop advertising
     pServer->getAdvertising()->stop();
     
@@ -91,6 +129,25 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
     pServer->getAdvertising()->start();
 }
 ```
+
+### Auto-Disconnect on Mode Switch
+
+When switching modes, the device **automatically disconnects all connected BLE clients** before changing the advertised service. This ensures:
+
+1. **Immediate mode enforcement**: Connected phones cannot continue using the old mode
+2. **Clean service transition**: Phone must reconnect to the new service
+3. **No cross-mode contamination**: MeshCore app can't send after switching to BitChat
+
+**Implementation details:**
+- Disconnect happens **before** advertising stops
+- Up to 2 second timeout waiting for disconnect
+- Force clears internal connection state
+- Advertising restarts with new service UUID
+
+**User experience:**
+- Phone immediately loses connection
+- Must reconnect to use new mode
+- No manual disconnect required
 
 ## Connection Security
 

@@ -81,8 +81,9 @@ BitChat requires **on-device UI navigation** (screen + buttons) to toggle betwee
 
 | Status | Count | Examples |
 |--------|-------|----------|
-| ✅ **Compatible** | **35 devices** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. |
-| ❌ **Incompatible** | **15+ devices** | T1000-E, Xiao C3/nRF52, devices without screens |
+| ✅ **Compatible (with display)** | **43 devices** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. |
+| ✅ **Compatible (button-only)** | **1 device** | T1000-E |
+| ❌ **Incompatible** | **14+ devices** | Xiao C3/nRF52, devices without screens or buttons |
 
 ### 📋 Complete Device List
 
@@ -113,7 +114,6 @@ Popular devices that currently cannot use BitChat:
 
 | Device | Platform | Why Incompatible |
 |--------|----------|------------------|
-| T1000-E | nRF52 | No display - tracker only |
 | Xiao C3 | ESP32 | No display - compact module |
 | Xiao nRF52 | nRF52 | No display - compact module |
 | RAK WisMesh Tag | nRF52 | No display - tag format |
@@ -460,17 +460,6 @@ struct BitchatConfig {
     uint32_t lastModified; // Unix timestamp
     uint8_t reserved[56];  // Future expansion
 };
-```
-
-### CLI Configuration
-
-```
-bitchat enable          ; Enable BitChat
-bitchat disable         ; Disable BitChat
-bitchat status          ; Show current status
-bitchat channel list    ; List channel mappings
-bitchat channel add <name> <key>  ; Add channel
-bitchat channel remove <name>     ; Remove channel
 ```
 
 ## Troubleshooting Builds
