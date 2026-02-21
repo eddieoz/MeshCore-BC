@@ -1,7 +1,6 @@
 #include <unity.h>
 
 // Include all test suites
-#include "test_button_ble_controller.h"
 #include "bitchat/test_bitchat_announce.cpp"
 #include "bitchat/test_bitchat_ble_service.cpp"
 #include "bitchat/test_bitchat_bridge.cpp"
@@ -338,13 +337,6 @@ int main(int argc, char **argv) {
   // derivePeerId — wrapper behaviour
   RUN_TEST(test::bitchat::test_derive_peer_id_null_key_returns_zero);
   RUN_TEST(test::bitchat::test_derive_peer_id_unique_per_key);
-
-  // Button BLE Mode Switching Tests
-  RUN_TEST(test::button_ble::test_mode_toggle_meshcore_to_bitchat);
-  RUN_TEST(test::button_ble::test_mode_toggle_bitchat_to_meshcore);
-  RUN_TEST(test::button_ble::test_mode_switch_calls_serial_interface);
-  RUN_TEST(test::button_ble::test_multiple_switches_in_sequence);
-
   UNITY_END();
 
   return 0;

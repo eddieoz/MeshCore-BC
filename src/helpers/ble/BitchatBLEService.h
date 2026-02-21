@@ -298,6 +298,7 @@ private:
   // TX buffers (avoid stack usage)
   BitchatMessage _tempTxMessage;
   uint8_t _tempTxBuffer[BITCHAT_MAX_PAYLOAD_SIZE + 100];
+  uint8_t _signBuffer[1024];
 
   // RX Buffer for deferred processing (Reference Implementation Pattern)
   // Incoming BLE writes are appended here in ISR, processed in loop()

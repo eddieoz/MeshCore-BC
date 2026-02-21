@@ -29,7 +29,7 @@ class LocalIdentity;
 #include "../ble/BitchatBLEService.h"
 #include "BitchatMessageEncapsulator.h"
 #include "ChannelRegistry.h"
-#include "FragmentReassembly.h"
+// #include "FragmentReassembly.h"
 #include "LoopPrevention.h"
 #include "MessageDecapsulator.h"
 
@@ -148,7 +148,7 @@ private:
   mesh::bitchat::LoopPrevention _loopPrevention;
   mesh::bitchat::BitchatMessageEncapsulator _encapsulator;
   mesh::bitchat::MessageDecapsulator _decapsulator;
-  mesh::bitchat::FragmentReassembly _fragmentReassembly;
+  // mesh::bitchat::FragmentReassembly _fragmentReassembly;
 
   // Temp buffer for decapsulation to avoid stack overflow
   mesh::bitchat::DecapsulationResult _tempDecapsulationResult;
@@ -190,8 +190,12 @@ private:
     char text[180]; // Max payload is ~180
     uint32_t timestamp;
   };
-  std::vector<OutgoingMessage>
-      _outgoingQueue; // Using vector as simple queue to avoid <queue> header dependency if not already there
+
+  static const size_t OUTGOING_QUEUE_SIZE = 5;
+  OutgoingMessage _outgoingQueue[OUTGOING_QUEUE_SIZE];
+  size_t _outgoingQueueHead = 0;
+  size_t _outgoingQueueTail = 0;
+  size_t _outgoingQueueCount = 0;
 
   // Helpers to sign BitChat messages
   void signBitChatMessage(mesh::ble::BitchatMessage &msg);

@@ -1,5 +1,7 @@
 #include "BitchatBLEService.h"
 
+#include "../bitchat/BitchatMessageEncapsulator.h"
+
 #ifdef ENABLE_BITCHAT
 
 #ifdef NATIVE_TEST
@@ -241,40 +243,13 @@ void BitchatBLEService::sendAnnouncement(uint64_t unixTimestamp) {
     // Serialize message for signing
     // CRITICAL: Must use the same logic as BitchatBridge::signBitChatMessage
     // to match Android AppConstants.SYNC_TTL_HOPS (0) and clear HAS_SIGNATURE flag
-    uint8_t signBuffer[1024]; // Safe size for announcement
-    size_t signOffset = 0;
+    size_t signOffset =
+        mesh::bitchat::BitchatMessageEncapsulator::serializeForSigning(msg, _signBuffer, sizeof(_signBuffer));
 
-    signBuffer[signOffset++] = msg.version;
-    signBuffer[signOffset++] = msg.type;
-    signBuffer[signOffset++] = 0; // Force TTL to 0 to match Android AppConstants.SYNC_TTL_HOPS
-
-    for (int i = 7; i >= 0; i--) {
-      signBuffer[signOffset++] = static_cast<uint8_t>((msg.timestamp >> (i * 8)) & 0xFF);
+    if (signOffset > 0) {
+      // Call external signing function
+      _signingCallback(msg.signature, _signBuffer, signOffset, _signingCallbackArg);
     }
-
-    // Mask out HAS_SIGNATURE for signing
-    signBuffer[signOffset++] = (msg.flags & ~BITCHAT_FLAG_HAS_SIGNATURE);
-    signBuffer[signOffset++] = static_cast<uint8_t>((msg.payloadLength >> 8) & 0xFF);
-    signBuffer[signOffset++] = static_cast<uint8_t>(msg.payloadLength & 0xFF);
-
-    // Sender ID (big-endian for BitChat protocol compatibility)
-    for (int i = 7; i >= 0; i--) {
-      signBuffer[signOffset++] = msg.senderId[i];
-    }
-
-    // CRITICAL: Aligned with iOS/Android - recipientID field (8 bytes) is ONLY present if flag is set
-    // For announcements (broadcast), it is usually NOT present.
-    if (msg.hasRecipient()) {
-      for (int i = 7; i >= 0; i--) {
-        signBuffer[signOffset++] = msg.recipientId[i];
-      }
-    }
-
-    memcpy(&signBuffer[signOffset], msg.payload, msg.payloadLength);
-    signOffset += msg.payloadLength;
-
-    // Apply signature
-    _signingCallback(msg.signature, signBuffer, signOffset, _signingCallbackArg);
   }
 
   // Serialize and send
@@ -673,13 +648,12 @@ void BitchatBLEService::onWrite(BLECharacteristic *pCharacteristic) {
   // MINIMAL WORK IN CALLBACK - BLE stack has limited stack space!
   // Just buffer data and set flags; all processing happens in loop()
 
-  std::string value = pCharacteristic->getValue();
-  if (value.empty()) {
+  const uint8_t *data = pCharacteristic->getData();
+  size_t length = pCharacteristic->getLength();
+
+  if (!data || length == 0) {
     return;
   }
-
-  const uint8_t *data = reinterpret_cast<const uint8_t *>(value.data());
-  size_t length = value.length();
 
   _lastWriteTime = millis();
   _pendingData = true; // Flag for loop() to process

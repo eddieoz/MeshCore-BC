@@ -1,12 +1,11 @@
 #include "BitchatIdentity.h"
 
 #ifdef NATIVE_TEST
-  // Use SHA256 implementation from test/mocks/sha256_impl.c
-  extern "C" void sha256_hash(const uint8_t *data, size_t len, uint8_t out[32]);
-  #include "../test/mocks/sha256_impl.c"
+// Use SHA256 implementation linked in tests
+extern "C" void sha256_hash(const uint8_t *data, size_t len, uint8_t out[32]);
 #else
-  #include "../../MeshCore.h"
-  #include "../../Utils.h"
+#include "../../MeshCore.h"
+#include "../../Utils.h"
 #endif
 
 #ifdef ENABLE_BITCHAT

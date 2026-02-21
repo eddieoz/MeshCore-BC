@@ -77,7 +77,8 @@ static void ed25519_pk_to_curve25519(uint8_t *curve25519_pub, const uint8_t *ed2
 BitchatBridge::BitchatBridge(mesh::Mesh &mesh, mesh::LocalIdentity &identity, const char *nodeName)
     : _mesh(mesh), _identity(identity), _nodeName(nodeName), _initialized(false), _bitchatPeerId(0),
       _messagesRelayed(0), _duplicatesDropped(0), _privacyDrops(0), _processingMessage(false),
-      _hasMeshChannel(false), _hasMeshSecret(false), _decapsulator(_channelRegistry) {
+      _hasMeshChannel(false), _hasMeshSecret(false), _decapsulator(_channelRegistry), _outgoingQueueHead(0),
+      _outgoingQueueTail(0), _outgoingQueueCount(0) {
   memset(_noisePublicKey, 0, sizeof(_noisePublicKey));
   memset(&_meshChannel, 0, sizeof(_meshChannel));
   memset(_meshChannelSecret, 0, sizeof(_meshChannelSecret));
@@ -177,10 +178,11 @@ void BitchatBridge::loop() {
   }
 
   // Process outgoing messages (MeshCore → BitChat) deferred from callbacks
-  if (!_outgoingQueue.empty()) {
+  if (_outgoingQueueCount > 0) {
     // Process one message per loop to keep stack clean and loop fast
-    OutgoingMessage msg = _outgoingQueue.front();
-    _outgoingQueue.erase(_outgoingQueue.begin());
+    OutgoingMessage msg = _outgoingQueue[_outgoingQueueHead];
+    _outgoingQueueHead = (_outgoingQueueHead + 1) % OUTGOING_QUEUE_SIZE;
+    _outgoingQueueCount--;
 
     // Check clients before attempting send
     if (_bleService.hasConnectedClients()) {
@@ -245,7 +247,7 @@ void BitchatBridge::loop() {
   _loopPrevention.clearOldEntries(now / 1000, 30);
 
   // Clear old fragment reassembly buffers (30 second timeout)
-  _fragmentReassembly.clearOldFragments(now / 1000, 30);
+  // _fragmentReassembly.clearOldFragments(now / 1000, 30);
 
   // Story 1: Bootstrapping - Periodically send BitChat announcements
   // Android app requires Unix timestamps to avoid "stale announcement" drop.
@@ -337,8 +339,8 @@ void BitchatBridge::onMeshcoreGroupMessage(const mesh::GroupChannel &channel, ui
 
   // DEFERRED: Queue for processing in loop() to avoid stack overflow
   // The call stack from MeshCore -> ... -> BitchatBLEService -> Bluefruit::notify is too deep
-  if (_outgoingQueue.size() < 5) {
-    OutgoingMessage msg;
+  if (_outgoingQueueCount < OUTGOING_QUEUE_SIZE) {
+    OutgoingMessage &msg = _outgoingQueue[_outgoingQueueTail];
     strncpy(msg.sender, senderName, sizeof(msg.sender) - 1);
     msg.sender[sizeof(msg.sender) - 1] = '\0';
 
@@ -347,7 +349,8 @@ void BitchatBridge::onMeshcoreGroupMessage(const mesh::GroupChannel &channel, ui
 
     msg.timestamp = timestamp;
 
-    _outgoingQueue.push_back(msg);
+    _outgoingQueueTail = (_outgoingQueueTail + 1) % OUTGOING_QUEUE_SIZE;
+    _outgoingQueueCount++;
   }
 
   _processingMessage = false;
@@ -476,43 +479,13 @@ void BitchatBridge::signBitChatMessage(mesh::ble::BitchatMessage &msg) {
   // 2. Serialize the message content for signing (excluding signature field itself)
   // Use member buffer to avoid stack overflow (~2KB allocation on stack was killing it!)
   // uint8_t buffer[BITCHAT_MAX_PAYLOAD_SIZE + 64];
-  size_t offset = 0;
+  size_t offset = mesh::bitchat::BitchatMessageEncapsulator::serializeForSigning(msg, _signingBuffer,
+                                                                                 sizeof(_signingBuffer));
 
-  _signingBuffer[offset++] = msg.version;
-  _signingBuffer[offset++] = msg.type;
-  _signingBuffer[offset++] = 0; // Force TTL to 0 to match Android AppConstants.SYNC_TTL_HOPS
-
-  // Timestamp (Big Endian)
-  for (int i = 0; i < 8; i++) {
-    _signingBuffer[offset++] = (msg.timestamp >> ((7 - i) * 8)) & 0xFF;
+  if (offset > 0) {
+    // 3. Apply padding and sign
+    onBitchatSignRequest(msg.signature, _signingBuffer, offset);
   }
-
-  // Flags: Mask out HAS_SIGNATURE for signing
-  // The signature covers the packet AS IF it didn't have a signature yet
-  _signingBuffer[offset++] = (msg.flags & ~BITCHAT_FLAG_HAS_SIGNATURE);
-
-  // Payload Length (Big Endian)
-  _signingBuffer[offset++] = (msg.payloadLength >> 8) & 0xFF;
-  _signingBuffer[offset++] = (msg.payloadLength & 0xFF);
-
-  // Sender ID (big-endian for BitChat protocol compatibility)
-  for (int i = 7; i >= 0; i--) {
-    _signingBuffer[offset++] = msg.senderId[i];
-  }
-
-  // CRITICAL: Aligned with iOS/Android - recipientID field (8 bytes) is ONLY present if flag is set
-  if (msg.hasRecipient()) {
-    for (int i = 7; i >= 0; i--) {
-      _signingBuffer[offset++] = msg.recipientId[i];
-    }
-  }
-
-  // Payload: starts at offset 30 (1+1+1+8+1+2+8+8)
-  memcpy(&_signingBuffer[offset], msg.payload, msg.payloadLength);
-  offset += msg.payloadLength;
-
-  // 3. Apply padding and sign
-  onBitchatSignRequest(msg.signature, _signingBuffer, offset);
 }
 
 // Story 1 & 2: Use hardcoded #mesh secret

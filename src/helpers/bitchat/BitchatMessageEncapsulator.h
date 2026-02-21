@@ -89,6 +89,9 @@ public:
   // Calculate number of fragments needed
   static size_t calculateFragmentCount(size_t messageSize);
 
+  // Serialize format used specifically for generating/verifying signatures
+  static size_t serializeForSigning(const BitchatMessage &msg, uint8_t *buffer, size_t bufferSize);
+
 private:
   uint32_t _nextMessageId;
 
@@ -102,7 +105,11 @@ private:
   void decryptPayload(const uint8_t *input, size_t len, const uint8_t *key, uint8_t *output);
 
   // Serialize BitChat message to bytes
-  size_t serializeMessage(const BitchatMessage &msg, uint8_t *buffer, size_t bufferSize);
+  static size_t serializeMessage(const BitchatMessage &msg, uint8_t *buffer, size_t bufferSize);
+
+  // Buffers to avoid stack overflows
+  uint8_t _serializationBuffer[2048];
+  uint8_t _decryptionBuffer[2048];
 };
 
 } // namespace bitchat
