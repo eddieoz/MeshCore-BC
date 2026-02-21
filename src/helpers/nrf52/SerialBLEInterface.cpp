@@ -471,6 +471,42 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
 
   _bitchatMode = enable;
 
+  // Disconnect any connected clients before switching modes
+  // This ensures the connected smartphone immediately sees the mode change
+  if (Bluefruit.connected() > 0) {
+    Serial.println("[BLE] Disconnecting connected client(s) for mode switch...");
+    
+    // Disconnect using stored handle if valid
+    if (_conn_handle != BLE_CONN_HANDLE_INVALID) {
+      sd_ble_gap_disconnect(_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+    }
+    
+    // Also try to disconnect any other connections (peripheral can have multiple centrals in some cases)
+    for (uint8_t idx = 0; idx < Bluefruit.connected(); idx++) {
+      BLEConnection* conn = Bluefruit.Connection(idx);
+      if (conn && conn->connected()) {
+        conn->disconnect();
+      }
+    }
+    
+    // Wait for disconnection to complete (poll with timeout)
+    unsigned long disconnectStart = millis();
+    while (Bluefruit.connected() > 0 && (millis() - disconnectStart) < 2000) {
+      delay(10);
+    }
+    
+    // Force clear internal state even if disconnect didn't complete
+    _conn_handle = BLE_CONN_HANDLE_INVALID;
+    _isDeviceConnected = false;
+    clearBuffers();
+    
+    if (Bluefruit.connected() > 0) {
+      Serial.println("[BLE] Warning: Some clients still connected after disconnect attempt");
+    } else {
+      Serial.println("[BLE] All clients disconnected");
+    }
+  }
+
   // Stop current advertising
   Bluefruit.Advertising.stop();
 
@@ -502,4 +538,6 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
   Bluefruit.Advertising.setInterval(BLE_ADV_INTERVAL_MIN, BLE_ADV_INTERVAL_MAX);
   Bluefruit.Advertising.setFastTimeout(BLE_ADV_FAST_TIMEOUT);
   Bluefruit.Advertising.start(0);
+
+  Serial.println("[BLE] Advertising restarted - ready for new connections");
 }

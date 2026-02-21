@@ -194,6 +194,35 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
 
   _bitchatMode = enable;
 
+  // Disconnect any connected clients before switching modes
+  // This ensures the connected smartphone immediately sees the mode change
+  if (pServer->getConnectedCount() > 0) {
+    Serial.println("[BLE] Disconnecting connected client(s) for mode switch...");
+    
+    // Get current connection count (it changes as we disconnect)
+    int connCount = pServer->getConnectedCount();
+    
+    // Disconnect all connected clients
+    for (int i = 0; i < connCount; i++) {
+      uint16_t connId = pServer->getConnIdByIndex(0); // Always get index 0 as array shrinks
+      if (connId != BLE_HS_CONN_HANDLE_NONE) {
+        pServer->disconnect(connId);
+      }
+    }
+    
+    // Wait for disconnection to complete (poll with timeout)
+    unsigned long disconnectStart = millis();
+    while (pServer->getConnectedCount() > 0 && (millis() - disconnectStart) < 2000) {
+      delay(10);
+    }
+    
+    if (pServer->getConnectedCount() > 0) {
+      Serial.println("[BLE] Warning: Some clients still connected after disconnect attempt");
+    } else {
+      Serial.println("[BLE] All clients disconnected");
+    }
+  }
+
   // Stop current advertising
   pServer->getAdvertising()->stop();
 
@@ -223,6 +252,8 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
   // Restart advertising
   pServer->getAdvertising()->start();
   adv_restart_time = 0;
+
+  Serial.println("[BLE] Advertising restarted - ready for new connections");
 }
 
 #define BLE_WRITE_MIN_INTERVAL 60
