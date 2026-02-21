@@ -210,21 +210,56 @@ build_repeater_firmwares() {
 
 build_companion_firmwares() {
 
-#  # build specific companion firmwares
-#  build_firmware "Heltec_v2_companion_radio_usb"
-#  build_firmware "Heltec_v2_companion_radio_ble"
-#  build_firmware "Heltec_v3_companion_radio_usb"
-#  build_firmware "Heltec_v3_companion_radio_ble"
-#  build_firmware "Xiao_S3_WIO_companion_radio_ble"
-#  build_firmware "LilyGo_T3S3_sx1262_companion_radio_usb"
-#  build_firmware "LilyGo_T3S3_sx1262_companion_radio_ble"
-#  build_firmware "RAK_4631_companion_radio_usb"
-#  build_firmware "RAK_4631_companion_radio_ble"
-#  build_firmware "t1000e_companion_radio_ble"
+  # build specific companion firmwares (BitChat-compatible BLE devices only)
+  # ESP32 Devices (with displays) - BitChat compatible:
+  build_firmware "Ebyte_EoRa-S3_companion_radio_ble"
+  build_firmware "Heltec_v2_companion_radio_ble"
+  build_firmware "Heltec_v3_companion_radio_ble"
+  build_firmware "Heltec_WSL3_companion_radio_ble"
+  build_firmware "heltec_v4_companion_radio_ble"
+  build_firmware "heltec_v4_tft_companion_radio_ble"
+  build_firmware "Heltec_Wireless_Tracker_companion_radio_ble"
+  build_firmware "heltec_tracker_v2_companion_radio_ble"
+  build_firmware "Heltec_Wireless_Paper_companion_radio_ble"
+  build_firmware "KeepteenLT1_companion_radio_ble"
+  build_firmware "LilyGo_T3S3_sx1262_companion_radio_ble"
+  build_firmware "LilyGo_T3S3_sx1276_companion_radio_ble"
+  build_firmware "Tbeam_SX1262_companion_radio_ble"
+  build_firmware "Tbeam_SX1276_companion_radio_ble"
+  build_firmware "T_Beam_S3_Supreme_SX1262_companion_radio_ble"
+  build_firmware "LilyGo_TDeck_companion_radio_ble"
+  build_firmware "LilyGo_T-Echo_companion_radio_ble"
+  build_firmware "LilyGo_T-Echo-Lite_companion_radio_ble"
+  build_firmware "LilyGo_TLora_V2_1_1_6_companion_radio_ble"
+  build_firmware "Mesh_pocket_companion_radio_ble"
+  build_firmware "Meshadventurer_sx1262_companion_radio_ble"
+  build_firmware "Meshadventurer_sx1268_companion_radio_ble"
+  build_firmware "Meshtiny_companion_radio_ble"
+  build_firmware "Nano_G2_Ultra_companion_radio_ble"
+  build_firmware "nibble_screen_connect_companion_radio_ble"
+  build_firmware "ProMicro_companion_radio_ble"
+  build_firmware "RAK3112_companion_radio_ble"
+  build_firmware "RAK_3401_companion_radio_ble"
+  build_firmware "Station_G2_companion_radio_ble"
+  build_firmware "ThinkNode_M1_companion_radio_ble"
+  build_firmware "ThinkNode_M2_companion_radio_ble"
+  build_firmware "ThinkNode_M5_companion_radio_ble"
+  build_firmware "Xiao_S3_WIO_companion_radio_ble"
 
-  # build all companion firmwares
-  build_all_firmwares_by_suffix "_companion_radio_usb"
-  build_all_firmwares_by_suffix "_companion_radio_ble"
+  # nRF52 Devices (with displays) - BitChat compatible:
+  build_firmware "Heltec_t114_companion_radio_ble"
+  build_firmware "ikoka_handheld_nrf_e22_22dbm_companion_radio_ble"
+  build_firmware "ikoka_handheld_nrf_e22_30dbm_096_companion_radio_ble"
+  build_firmware "ikoka_handheld_nrf_e22_30dbm_096_rotated_companion_radio_ble"
+  build_firmware "ikoka_stick_nrf_22dbm_companion_radio_ble"
+  build_firmware "ikoka_stick_nrf_30dbm_companion_radio_ble"
+  build_firmware "ikoka_stick_nrf_33dbm_companion_radio_ble"
+  build_firmware "RAK_4631_companion_radio_ble"
+  build_firmware "WioTrackerL1_companion_radio_ble"
+  build_firmware "WioTrackerL1Eink_companion_radio_ble"
+
+  # nRF52 Devices (button-only, no display) - BitChat compatible:
+  build_firmware "t1000e_companion_radio_ble"
 
 }
 
