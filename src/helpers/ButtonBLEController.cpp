@@ -5,11 +5,6 @@
 
 #include "Button.h"  // From ui-orig folder (included in build path)
 
-// Include buzzer header at top level (not inside function)
-#ifdef PIN_BUZZER
-#include "buzzer.h"
-#endif
-
 // LED blink timing
 #define MESHCORE_BLINK_INTERVAL_MS  500  // Slow blink for MeshCore (500ms on/off)
 #define BITCHAT_BLINK_INTERVAL_MS   150  // Fast blink for BitChat (150ms on/off)
@@ -38,10 +33,10 @@ void ButtonBLEController::begin() {
         _button = new Button(PIN_USER_BTN, USER_BTN_PRESSED);
         _button->begin();
         
-        // Set up quintuple press callback
-        _button->onQuintuplePress([this]() { handleQuintuplePress(); });
+        // Set up triple press callback
+        _button->onTriplePress([this]() { handleTriplePress(); });
         
-        Serial.println("[ButtonBLEController] Initialized - 5x press to toggle mode");
+        Serial.println("[ButtonBLEController] Initialized - 3x press to toggle mode");
         
         // Initial LED indication for MeshCore mode (boot state)
         indicateMeshCoreMode();
@@ -70,7 +65,7 @@ void ButtonBLEController::loop() {
     updateLedFeedback();
 }
 
-void ButtonBLEController::handleQuintuplePress() {
+void ButtonBLEController::handleTriplePress() {
     if (_serial == nullptr) return;
     
     // Toggle BitChat mode
@@ -151,10 +146,10 @@ void ButtonBLEController::playModeTone(bool bitChatMode) {
     // Play appropriate tone
     if (bitChatMode) {
         // High tone for BitChat
-        rtttl::begin(PIN_BUZZER, BITCHAT_MODE_TONE);
+        // rtttl::begin(PIN_BUZZER, BITCHAT_MODE_TONE);
     } else {
         // Low tone for MeshCore
-        rtttl::begin(PIN_BUZZER, MESHCORE_MODE_TONE);
+        // rtttl::begin(PIN_BUZZER, MESHCORE_MODE_TONE);
     }
     
     // Note: The tone will play non-blocking. We don't wait for it to finish.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-BitChat support requires **on-device UI navigation** (screen + buttons) to toggle between MeshCore and BitChat BLE modes. This page lists all compatible and incompatible devices.
+BitChat support requires either **on-device UI navigation** (screen + buttons) or **button-based mode switching** to toggle between MeshCore and BitChat BLE modes. This page lists all compatible and incompatible devices.
 
 ## Compatible Devices (35 Total)
 
@@ -67,20 +67,22 @@ These devices have displays and buttons for menu-based BLE mode switching.
 
 ## Button-Only Devices (No Display)
 
-These devices use **button-based mode switching** (5x press) with LED/buzzer feedback instead of menu navigation. See [Button BLE Controller](../button_ble_controller.md) for details.
+These devices use **button-based mode switching** (5x press) with LED/buzzer feedback instead of menu navigation. The mode switching is handled by UITask's quintuple press handler (not a separate controller). See [Button BLE Controller](../button_ble_controller.md) for details.
 
 ### nRF52 (Button-Only)
 
-| # | Device | Variant | Button | LED | Buzzer | Build Environment |
-|---|--------|---------|--------|-----|--------|-------------------|
-| 1 | **T1000-E** | `t1000-e` | ✓ | ✓ Green | ✓ | `t1000e_companion_radio_ble` |
-| 2 | **RAK WisMesh Tag** | `rak_wismesh_tag` | ✓ | ✓ RGB | ✓ | Planned |
-| 3 | MinewSemi ME25LS01 | `minewsemi_me25ls01` | ✓ | ✓ RGB | ✗ | Planned |
+| # | Device | Variant | Button | LED | Buzzer | Build Environment | Implementation |
+|---|--------|---------|--------|-----|--------|-------------------|----------------|
+| 1 | **T1000-E** | `t1000-e` | ✓ | ✓ Green | ✓ | `t1000e_companion_radio_ble` | UITask (NullDisplayDriver) |
+| 2 | **RAK WisMesh Tag** | `rak_wismesh_tag` | ✓ | ✓ RGB | ✓ | Planned | - |
+| 3 | MinewSemi ME25LS01 | `minewsemi_me25ls01` | ✓ | ✓ RGB | ✗ | Planned | - |
 
-**Usage:** Press the button 5 times rapidly to toggle between MeshCore and BitChat modes.
-- 3 slow LED blinks = MeshCore mode
-- 3 fast LED blinks = BitChat mode
-- Different buzzer tones for audio feedback (if available)
+**Usage:** Press the user button **5 times rapidly** (within ~3 seconds) to toggle between MeshCore and BitChat modes.
+- 3 slow LED blinks (500ms) = MeshCore mode
+- 3 fast LED blinks (150ms) = BitChat mode
+- Buzzer acknowledgment tone on mode switch (if available)
+
+**Note:** T1000-E uses `USER_BTN_PRESSED=LOW` as the button is active LOW.
 
 ## Incompatible Devices (No Display/No Button)
 

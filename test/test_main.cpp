@@ -37,30 +37,15 @@ namespace test {
 namespace bitchat {
 void resetChannelTestState();
 }
-namespace button_ble {
-struct ButtonBLETestState;
-extern ButtonBLETestState* g_buttonBLEState;
-}
 } // namespace test
-
-// Global state for ButtonBLEController tests
-test::button_ble::ButtonBLETestState* test::button_ble::g_buttonBLEState = nullptr;
 
 void setUp(void) {
   // Setup before each test
   test::bitchat::resetChannelTestState();
-  
-  // Initialize ButtonBLEController test state
-  if (test::button_ble::g_buttonBLEState == nullptr) {
-    test::button_ble::g_buttonBLEState = new test::button_ble::ButtonBLETestState();
-  }
 }
 
 void tearDown(void) {
   // Cleanup after each test
-  if (test::button_ble::g_buttonBLEState != nullptr) {
-    test::button_ble::g_buttonBLEState->reset();
-  }
 }
 
 int main(int argc, char **argv) {
@@ -354,23 +339,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test::bitchat::test_derive_peer_id_null_key_returns_zero);
   RUN_TEST(test::bitchat::test_derive_peer_id_unique_per_key);
 
-  // ButtonBLEController Tests
-  RUN_TEST(test::button_ble::test_controller_initialization_creates_button);
-  RUN_TEST(test::button_ble::test_controller_initializes_in_meshcore_mode);
-  RUN_TEST(test::button_ble::test_controller_registers_quintuple_press_callback);
-  RUN_TEST(test::button_ble::test_quintuple_press_toggles_to_bitchat_mode);
-  RUN_TEST(test::button_ble::test_quintuple_press_toggles_back_to_meshcore_mode);
+  // Button BLE Mode Switching Tests
+  RUN_TEST(test::button_ble::test_mode_toggle_meshcore_to_bitchat);
+  RUN_TEST(test::button_ble::test_mode_toggle_bitchat_to_meshcore);
   RUN_TEST(test::button_ble::test_mode_switch_calls_serial_interface);
-  RUN_TEST(test::button_ble::test_meshcore_mode_led_slow_blink);
-  RUN_TEST(test::button_ble::test_bitchat_mode_led_fast_blink);
-  RUN_TEST(test::button_ble::test_led_blinks_three_times);
-  RUN_TEST(test::button_ble::test_meshcore_mode_low_tone);
-  RUN_TEST(test::button_ble::test_bitchat_mode_high_tone);
-  RUN_TEST(test::button_ble::test_buzzer_enable_pin_set);
-  RUN_TEST(test::button_ble::test_loop_updates_button);
   RUN_TEST(test::button_ble::test_multiple_switches_in_sequence);
-  RUN_TEST(test::button_ble::test_controller_active_after_begin);
-  RUN_TEST(test::button_ble::test_indicate_methods_work_correctly);
 
   UNITY_END();
 

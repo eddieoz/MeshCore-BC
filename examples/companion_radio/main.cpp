@@ -106,17 +106,11 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
 BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
 #endif
 
-// ButtonBLEController for button-only devices (no display, but with button and BLE)
-// Enables quintuple-press mode switching with LED/buzzer feedback
+// ButtonBLEController for button-only devices (no display at all, no DISPLAY_CLASS)
+// For devices with NullDisplayDriver, use UITask's button handling instead
 #if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
 #include <helpers/ButtonBLEController.h>
 ButtonBLEController button_ble_controller(&serial_interface);
-#elif defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
-// Check if using NullDisplayDriver (display-less device with DISPLAY_CLASS defined)
-#if defined(NullDisplayDriver)
-#include <helpers/ButtonBLEController.h>
-ButtonBLEController button_ble_controller(&serial_interface);
-#endif
 #endif
 
 /* END GLOBAL OBJECTS */
@@ -172,6 +166,8 @@ void setup() {
 
 #ifdef BLE_PIN_CODE
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
+  serial_interface.enable();  // Start BLE advertising
+  Serial.println("[BLE] Advertising started");
 
   // Initialize BitChat bridge for nRF52
   #ifdef ENABLE_BITCHAT
@@ -303,12 +299,10 @@ void setup() {
   ui_task.begin(disp, &sensors, the_mesh.getNodePrefs());  // still want to pass this in as dependency, as prefs might be moved
 #endif
 
-// Initialize ButtonBLEController for button-only BLE devices
-#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && defined(PIN_USER_BTN)
-#if !defined(DISPLAY_CLASS) || defined(NullDisplayDriver)
+// Initialize ButtonBLEController for button-only BLE devices (no DISPLAY_CLASS at all)
+#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
   button_ble_controller.begin();
   Serial.println("[Main] ButtonBLEController initialized for button-only mode switching");
-#endif
 #endif
 }
 
@@ -319,11 +313,9 @@ void loop() {
   ui_task.loop();
 #endif
 
-// Update ButtonBLEController for button-only BLE devices
-#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && defined(PIN_USER_BTN)
-#if !defined(DISPLAY_CLASS) || defined(NullDisplayDriver)
+// Update ButtonBLEController for button-only BLE devices (no DISPLAY_CLASS at all)
+#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
   button_ble_controller.loop();
-#endif
 #endif
 
   rtc_clock.tick();

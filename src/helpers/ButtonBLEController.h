@@ -14,7 +14,7 @@ class Button;
  * LED/buzzer feedback to indicate the current mode.
  * 
  * Features:
- * - Quintuple (5x) press to toggle between MeshCore and BitChat modes
+ * - Triple (3x) press to toggle between MeshCore and BitChat modes
  * - LED feedback: 3 blinks (slow = MeshCore, fast = BitChat)
  * - Buzzer feedback: Different tones for each mode (if buzzer available)
  * 
@@ -48,7 +48,7 @@ private:
     bool _ledCurrentState;
     
     // Button callback handler
-    void handleQuintuplePress();
+    void handleTriplePress();
     
     // LED feedback helpers
     void startLedFeedback(bool fastMode);

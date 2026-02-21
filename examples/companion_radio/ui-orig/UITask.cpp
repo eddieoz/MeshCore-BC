@@ -450,7 +450,19 @@ void UITask::handleButtonQuintuplePress() {
   MESH_DEBUG_PRINTLN("UITask: quintuple press triggered");
 #ifdef ENABLE_BITCHAT
   if (_serial) {
-    _serial->setBitChatMode(!_serial->isBitChatMode());
+    bool newBitChatMode = !_serial->isBitChatMode();
+    _serial->setBitChatMode(newBitChatMode);
+    
+    // LED feedback - 3 blinks to confirm mode change
+    #ifdef LED_PIN
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(LED_PIN, HIGH);
+      delay(newBitChatMode ? 150 : 500);  // Fast for BitChat, slow for MeshCore
+      digitalWrite(LED_PIN, LOW);
+      delay(newBitChatMode ? 150 : 500);
+    }
+    #endif
+    
 #ifdef PIN_BUZZER
     notify(UIEventType::ack);
 #endif

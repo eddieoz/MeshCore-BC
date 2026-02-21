@@ -1,8 +1,8 @@
-# Button BLE Controller
+# Button-Based BLE Mode Switching
 
 ## Overview
 
-The **ButtonBLEController** provides BLE mode switching (MeshCore ↔ BitChat) for devices **without displays** but with physical buttons. This enables users to switch between MeshCore UART mode and BitChat BLE mode using button presses, with LED and buzzer feedback for mode indication.
+This feature provides button-based BLE mode switching (MeshCore ↔ BitChat) for devices **without displays** but with physical buttons. This enables users to switch between MeshCore UART mode and BitChat BLE mode using button presses, with LED and buzzer feedback for mode indication.
 
 ## Target Devices
 
@@ -10,16 +10,16 @@ This feature is designed for button-only devices such as:
 
 | Device | Platform | Button | LED | Buzzer | Status |
 |--------|----------|--------|-----|--------|--------|
-| **T1000-E** | nRF52 | ✓ | ✓ Green | ✓ | ✅ Implemented |
+| **T1000-E** | nRF52 | ✓ | ✓ Green | ✓ | ✅ Implemented (via UITask) |
 | RAK WisMesh Tag | nRF52 | ✓ | ✓ RGB | ✓ | 📋 Planned |
 | MinewSemi ME25LS01 | nRF52 | ✓ | ✓ RGB | ✗ | 📋 Planned |
 | Heltec Mesh Solar | nRF52 | ✓ | ✓ RGB | ✗ | 📋 Planned |
 
 ## How It Works
 
-### Button Action: Quintuple Press
+### Button Action: Quintuple Press (5x)
 
-Press the user button **5 times rapidly** (within 500ms between clicks) to toggle between modes.
+Press the user button **5 times rapidly** (within ~3 seconds total) to toggle between modes.
 
 ```
 User Action: [PRESS][RELEASE] x 5 times
@@ -31,7 +31,7 @@ User Action: [PRESS][RELEASE] x 5 times
 
 ### Visual Feedback (LED)
 
-The LED provides visual confirmation of the current mode:
+The LED provides visual confirmation of the mode change:
 
 | Mode | Pattern | Description |
 |------|---------|-------------|
@@ -40,55 +40,72 @@ The LED provides visual confirmation of the current mode:
 
 ### Audio Feedback (Buzzer)
 
-If the device has a buzzer, it plays a distinctive tone:
-
-| Mode | Tone | Description |
-|------|------|-------------|
-| **MeshCore** | Low "C5" | Deeper tone |
-| **BitChat** | High "G6" | Higher tone |
+If the device has a buzzer, it plays an acknowledgment tone when the mode changes.
 
 ### Boot Behavior
 
 - Device always boots in **MeshCore mode** (no persistence)
-- LED blinks 3x slowly on boot to indicate MeshCore mode
-- No buzzer sound on boot (to avoid annoying users)
+- BLE advertising starts automatically after boot
+- No button feedback on boot (to avoid annoying users)
 
 ## Implementation Details
 
 ### Architecture
 
+For devices with `NullDisplayDriver` (like T1000-E), the implementation uses **UITask's built-in button handlers** rather than a separate ButtonBLEController. This avoids conflicts with existing button functionality.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    ButtonBLEController                       │
+│                         UITask                               │
 ├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │ Button Class │───→│ Mode Toggle  │───→│   Feedback   │  │
-│  │ (5x press)   │    │ setBitChat() │    │ LED + Buzzer │  │
-│  └──────────────┘    └──────────────┘    └──────────────┘  │
+│  ┌──────────────┐    ┌──────────────────┐                  │
+│  │ Button Class │───→│ Quintuple Press  │                  │
+│  │ (5x press)   │    │   Handler        │                  │
+│  └──────────────┘    └────────┬─────────┘                  │
+│                               ↓                             │
+│                    ┌─────────────────────┐                 │
+│                    │ setBitChatMode()    │                 │
+│                    │ + LED Feedback      │                 │
+│                    └─────────────────────┘                 │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ↓
                    ┌─────────────────────┐
                    │ SerialBLEInterface  │
-                   │ - isBitChatMode()   │
-                   │ - setBitChatMode()  │
+                   │ - Switches BLE      │
+                   │   advertising       │
                    └─────────────────────┘
 ```
 
 ### Code Integration
 
-The controller is automatically included in `main.cpp` when:
+The mode switching is handled in `UITask::handleButtonQuintuplePress()` when:
 - `ENABLE_BITCHAT` is defined
-- `BLE_PIN_CODE` is defined (BLE enabled)
-- `PIN_USER_BTN` is defined (has button)
-- No `DISPLAY_CLASS` or `NullDisplayDriver` is used
+- `NullDisplayDriver` is used (display-less device)
 
 ```cpp
-// From main.cpp - automatic inclusion
-#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
-#include <helpers/ButtonBLEController.h>
-ButtonBLEController button_ble_controller(&serial_interface);
+void UITask::handleButtonQuintuplePress() {
+#ifdef ENABLE_BITCHAT
+  if (_serial) {
+    bool newBitChatMode = !_serial->isBitChatMode();
+    _serial->setBitChatMode(newBitChatMode);
+    
+    // LED feedback - 3 blinks
+    #ifdef LED_PIN
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(LED_PIN, HIGH);
+      delay(newBitChatMode ? 150 : 500);
+      digitalWrite(LED_PIN, LOW);
+      delay(newBitChatMode ? 150 : 500);
+    }
+    #endif
+    
+    #ifdef PIN_BUZZER
+    notify(UIEventType::ack);  // Acknowledgment sound
+    #endif
+  }
 #endif
+}
 ```
 
 ## Device-Specific Configuration
@@ -104,11 +121,13 @@ build_flags =
   -D ENABLE_BITCHAT=1
   -D DISPLAY_CLASS=NullDisplayDriver
   -D PIN_USER_BTN=6
-  -D USER_BTN_PRESSED=HIGH
+  -D USER_BTN_PRESSED=LOW    ; T1000-E button is active LOW
   -D PIN_BUZZER=25
   -D PIN_BUZZER_EN=37
   -D LED_PIN=24
 ```
+
+**Note:** The T1000-E button is **active LOW** (goes to LOW when pressed), so `USER_BTN_PRESSED=LOW` must be defined.
 
 ### Adding Support for New Devices
 
@@ -128,9 +147,9 @@ build_flags =
   -D ENABLE_BITCHAT=1
   -D DISPLAY_CLASS=NullDisplayDriver
   -D PIN_USER_BTN=YOUR_BUTTON_PIN
-  -D USER_BTN_PRESSED=HIGH or LOW
+  -D USER_BTN_PRESSED=LOW    ; or HIGH depending on hardware
   -D PIN_BUZZER=YOUR_BUZZER_PIN    ; Optional
-  -D PIN_BUZZER_EN=YOUR_BUZZER_EN  ; Optional, for T1000-E style
+  -D PIN_BUZZER_EN=YOUR_BUZZER_EN  ; Optional
   -D LED_PIN=YOUR_LED_PIN
 
 build_src_filter =
@@ -138,7 +157,6 @@ build_src_filter =
   +<helpers/ui/buzzer.cpp>                  ; Optional
   +<helpers/bitchat/*.cpp>
   +<helpers/ble/*.cpp>
-  +<helpers/ButtonBLEController.cpp>
   +<../examples/companion_radio/*.cpp>
   +<../examples/companion_radio/ui-orig/*.cpp>
 ```
@@ -151,37 +169,47 @@ pio run -e your_device_companion_radio_ble
 
 ## Troubleshooting
 
+### Device Not Appearing in Bluetooth Scan
+
+- Ensure BLE advertising is started (`serial_interface.enable()` is called in main.cpp)
+- Check that `BLE_PIN_CODE` is defined
+- Verify the device name in serial logs (should show "[BLE] Advertising started")
+
 ### LED Not Blinking
 
 - Verify `LED_PIN` or `PIN_STATUS_LED` is correctly defined
 - Check if `LED_STATE_ON` matches your hardware (HIGH or LOW)
+- For T1000-E: `LED_PIN` is 24 (green LED)
 
 ### Buzzer Not Sounding
 
 - Verify `PIN_BUZZER` is defined
-- For T1000-E style buzzers, ensure `PIN_BUZZER_EN` is defined
-- Check if buzzer enable pin needs HIGH or LOW
+- For T1000-E style buzzers, ensure `PIN_BUZZER_EN` is defined and set to 37
+- Check that `buzzer.begin()` is called in UITask
 
 ### Button Not Responding
 
 - Verify `PIN_USER_BTN` is correctly defined
-- Check `USER_BTN_PRESSED` state (HIGH or LOW when pressed)
-- Ensure button debounce time (50ms) is sufficient
+- Check `USER_BTN_PRESSED` state:
+  - T1000-E: `USER_BTN_PRESSED=LOW` (active LOW)
+  - Other devices: may vary
+- Ensure button debounce time is sufficient
 
 ### Mode Not Switching
 
 - Verify BitChat is enabled: `ENABLE_BITCHAT=1`
 - Verify BLE is enabled: `BLE_PIN_CODE` defined
-- Check serial output for `[ButtonBLEController] Initialized` message
+- Check serial output for "[BLE] Switched to BitChat mode" or "[BLE] Switched to MeshCore mode"
 
 ## User Guide
 
 ### Switching to BitChat Mode
 
-1. Press the button **5 times rapidly** (within ~2 seconds total)
+1. Press the button **5 times rapidly** (within ~3 seconds total)
 2. Wait for feedback:
    - **3 fast LED blinks** = BitChat mode active
-   - **High buzzer tone** = BitChat mode active (if buzzer present)
+   - **Buzzer tone** = Acknowledgment (if buzzer present)
+   - Serial log: "[BLE] Switched to BitChat mode"
 3. Open BitChat app on your phone
 4. Connect to the device (it will advertise as BitChat-compatible)
 
@@ -190,7 +218,8 @@ pio run -e your_device_companion_radio_ble
 1. Press the button **5 times rapidly** again
 2. Wait for feedback:
    - **3 slow LED blinks** = MeshCore mode active
-   - **Low buzzer tone** = MeshCore mode active (if buzzer present)
+   - **Buzzer tone** = Acknowledgment (if buzzer present)
+   - Serial log: "[BLE] Switched to MeshCore mode"
 3. Use with MeshCore-compatible apps
 
 ### Visual Reference
@@ -203,13 +232,13 @@ pio run -e your_device_companion_radio_ble
 │  MeshCore Mode (Default)                                   │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  LED: ▄▀ ▄▀ ▄▀  (slow blink: 500ms on/off)           │  │
-│  │  Buzzer: ♪ Low tone (C5)                             │  │
+│  │  Buzzer: ♪ Acknowledgment tone                      │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                             │
 │  BitChat Mode                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  LED: ▄▀▄▀▄▀  (fast blink: 150ms on/off)             │  │
-│  │  Buzzer: ♪ High tone (G6)                            │  │
+│  │  Buzzer: ♪ Acknowledgment tone                      │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                             │
 │  Action: 5x button press to toggle                         │
@@ -220,13 +249,13 @@ pio run -e your_device_companion_radio_ble
 ## Future Enhancements
 
 - [ ] Add persistence (save mode to flash)
-- [ ] Add double-press for quick status check (1 blink = current mode)
+- [ ] Add triple-press for quick status check (1 blink = current mode)
 - [ ] Support RGB LED color coding
 - [ ] Add vibration feedback for devices with haptic motors
-- [ ] Long-press action for additional functions
+- [ ] Reduce required button presses from 5x to 3x with better timing
 
 ## See Also
 
-- [BitChat Compatibility](./bitchat/compatibility_devices.md)
-- [BitChat Build Configuration](./bitchat/build_configuration.md)
+- [BitChat Compatibility](./compatibility_devices.md)
+- [BitChat Build Configuration](./build_configuration.md)
 - [T1000-E Variant](../../variants/t1000-e/)
