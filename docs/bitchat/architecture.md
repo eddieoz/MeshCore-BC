@@ -1,8 +1,8 @@
-# BitChat Integration Architecture
+# Bitchat Integration Architecture
 
 ## Overview
 
-The BitChat integration follows a layered architecture that separates BLE communication, protocol translation, and mesh networking concerns. This document describes the component structure and data flow.
+The Bitchat integration follows a layered architecture that separates BLE communication, protocol translation, and mesh networking concerns. This document describes the component structure and data flow.
 
 ## Component Diagram
 
@@ -12,7 +12,7 @@ The BitChat integration follows a layered architecture that separates BLE commun
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌─────────────────┐    ┌─────────────────┐                              │
-│  │   MeshCore App  │    │   BitChat App   │                              │
+│  │   MeshCore App  │    │   Bitchat App   │                              │
 │  │   (Android/iOS) │    │   (Android)     │                              │
 │  └────────┬────────┘    └────────┬────────┘                              │
 │           │                      │                                      │
@@ -26,13 +26,13 @@ The BitChat integration follows a layered architecture that separates BLE commun
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                        BitchatBridge                                │    │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────────┐ │    │
-│  │  │ onBitchat   │  │  onMeshcore │  │  signBitChat│  │   begin    │ │    │
+│  │  │ onBitchat   │  │  onMeshcore │  │  signBitchat│  │   begin    │ │    │
 │  │  │ MessageReceived│ │ GroupMessage│  │  Message    │  │   loop     │ │    │
 │  │  └──────┬──────┘  └──────┬──────┘  └─────────────┘  └────────────┘ │    │
 │  │         │                │                                         │    │
 │  │  ┌──────▼──────┐  ┌──────▼──────┐                                  │    │
-│  │  │  BitChat →  │  │  MeshCore → │                                  │    │
-│  │  │  MeshCore   │  │  BitChat    │                                  │    │
+│  │  │  Bitchat →  │  │  MeshCore → │                                  │    │
+│  │  │  MeshCore   │  │  Bitchat    │                                  │    │
 │  │  │  (Encaps)   │  │  (Decaps)   │                                  │    │
 │  │  └─────────────┘  └─────────────┘                                  │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
@@ -110,16 +110,16 @@ Central orchestrator that connects all components. Manages:
 Key methods:
 - `begin()` - Initialize bridge components
 - `loop()` - Process queued messages
-- `onBitchatMessageReceived()` - Handle BitChat → MeshCore
-- `onMeshcoreGroupMessage()` - Handle MeshCore → BitChat
+- `onBitchatMessageReceived()` - Handle Bitchat → MeshCore
+- `onMeshcoreGroupMessage()` - Handle MeshCore → Bitchat
 
 ### BitchatBLEService
 
 **File**: `src/helpers/ble/BitchatBLEService.h/cpp`
 
-BLE GATT service implementation for BitChat protocol:
+BLE GATT service implementation for Bitchat protocol:
 - Handles BLE connections
-- Parses incoming BitChat messages
+- Parses incoming Bitchat messages
 - Sends outgoing messages via notifications
 - Manages peer cache from ANNOUNCE messages
 
@@ -127,8 +127,8 @@ BLE GATT service implementation for BitChat protocol:
 
 **File**: `src/helpers/bitchat/BitchatMessageEncapsulator.h/cpp`
 
-Encapsulates BitChat messages for MeshCore transport:
-- Adds BitChat magic header (`BC\0\0`)
+Encapsulates Bitchat messages for MeshCore transport:
+- Adds Bitchat magic header (`BC\0\0`)
 - Handles fragmentation for large messages
 - Encrypts with channel secret
 
@@ -136,8 +136,8 @@ Encapsulates BitChat messages for MeshCore transport:
 
 **File**: `src/helpers/bitchat/MessageDecapsulator.h/cpp`
 
-Decapsulates BitChat messages from MeshCore packets:
-- Detects BitChat magic header
+Decapsulates Bitchat messages from MeshCore packets:
+- Detects Bitchat magic header
 - Decrypts payload
 - Handles fragment reassembly
 
@@ -145,7 +145,7 @@ Decapsulates BitChat messages from MeshCore packets:
 
 **File**: `src/helpers/bitchat/ChannelRegistry.h/cpp`
 
-Maps BitChat channel names to MeshCore group channels:
+Maps Bitchat channel names to MeshCore group channels:
 - Hashtag key derivation (first 16 bytes of SHA256)
 - Bidirectional lookups (name ↔ key)
 - Auto-registration of #mesh channel
@@ -165,7 +165,7 @@ bool _hasMeshSecret;             // true after computation
 - `computeMeshSecret()` - Derives `first_16_bytes(SHA256("#mesh"))` during initialization
 - `isMeshChannel(const mesh::GroupChannel& channel)` - Verifies message belongs to #mesh channel
 
-This ensures interoperability with BitChat's `#mesh` hashtag channel implementation.
+This ensures interoperability with Bitchat's `#mesh` hashtag channel implementation.
 
 **⚠️ Memory Layout Warning**: The `mesh::GroupChannel` struct has:
 - `hash[PATH_HASH_SIZE]` where `PATH_HASH_SIZE = 1` (only 1 byte!)
@@ -188,16 +188,16 @@ _meshChannel.hash[0] = channel.hash[0];
 
 **File**: `src/helpers/bitchat/LoopPrevention.h/cpp`
 
-Prevents message loops between BitChat and MeshCore:
+Prevents message loops between Bitchat and MeshCore:
 - FNV-1a hash for message identification
 - 64-entry cache with timeout
-- `📱` prefix detection for BitChat origin
+- `📱` prefix detection for Bitchat origin
 
 ### BitchatIdentity
 
 **File**: `src/helpers/bitchat/BitchatIdentity.h/cpp`
 
-Derives BitChat peer IDs from MeshCore Ed25519 keys:
+Derives Bitchat peer IDs from MeshCore Ed25519 keys:
 - First 8 bytes of public key (little-endian)
 - Verification functions
 
@@ -212,10 +212,10 @@ Persistent configuration storage:
 
 ## Data Flow
 
-### BitChat → MeshCore
+### Bitchat → MeshCore
 
 ```
-1. BitChat App (Android)
+1. Bitchat App (Android)
    └─► Writes MESSAGE to BLE characteristic
 
 2. BitchatBLEService
@@ -245,7 +245,7 @@ Persistent configuration storage:
    └─► Or receive and display (if destination)
 ```
 
-### MeshCore → BitChat
+### MeshCore → Bitchat
 
 ```
 1. LoRa Radio
@@ -264,7 +264,7 @@ Persistent configuration storage:
 
 4. BitchatBridge::loop() (deferred)
    └─► Processes outgoing queue
-   └─► Builds BitChat MESSAGE structure:
+   └─► Builds Bitchat MESSAGE structure:
        - version: 1
        - type: 0x02 (MESSAGE)
        - timestamp: current time
@@ -276,7 +276,7 @@ Persistent configuration storage:
    └─► Serializes message to bytes
    └─► Sends BLE notification
 
-6. BitChat App (Android)
+6. Bitchat App (Android)
    └─► Receives notification
    └─► Displays message in #mesh channel
 ```
@@ -311,7 +311,7 @@ Persistent configuration storage:
 
 ### Static Allocation Strategy
 
-All BitChat components use static allocation (no heap):
+All Bitchat components use static allocation (no heap):
 
 | Component | Static Size |
 |-----------|-------------|
@@ -339,7 +339,7 @@ void loop() {
 
 ## Thread Safety
 
-The BitChat bridge operates in a single-threaded environment (Arduino-style loop). However, BLE callbacks occur in interrupt context:
+The Bitchat bridge operates in a single-threaded environment (Arduino-style loop). However, BLE callbacks occur in interrupt context:
 
 ### ISR-Safe Operations
 
@@ -388,7 +388,7 @@ void onBLEWrite() {
 | BLE Callbacks | `BLECharacteristicCallbacks` | `BLECharacteristic::WriteCallback` | Stub |
 | Crypto | Hardware AES | Software | Stub |
 | Filesystem | SPIFFS | InternalFS | Mock |
-| Mode Switching (Menu) | `setBitChatMode()` - UUID swap | Menu-based UUID swap | N/A |
+| Mode Switching (Menu) | `setBitchatMode()` - UUID swap | Menu-based UUID swap | N/A |
 | Mode Switching (Button) | `handleButtonQuintuplePress()` | `handleButtonQuintuplePress()` | N/A |
 
 ### ESP32 BLE Implementation
@@ -409,7 +409,7 @@ class BitchatBLEService : public BLEServiceWrapper,
 - Service attaches to existing BLE server from `SerialBLEInterface`
 - Uses `BLE2902` descriptor for notification enable/disable
 - Write handling performs minimal work in callback (deferred processing)
-- Mode switching changes advertisement UUID via `setBitChatMode()`
+- Mode switching changes advertisement UUID via `setBitchatMode()`
 
 ### nRF52 BLE Implementation
 
@@ -432,7 +432,7 @@ void onWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, u
 ### Compile-Time Flags
 
 ```cpp
-ENABLE_BITCHAT          // Include BitChat code
+ENABLE_BITCHAT          // Include Bitchat code
 BITCHAT_DEBUG           // Enable debug logging
 NRF52_PLATFORM          // nRF52-specific code
 ESP32                   // ESP32-specific code
@@ -447,16 +447,16 @@ For devices without displays (like T1000-E), mode switching is handled via butto
 // In UITask::handleButtonQuintuplePress()
 void handleButtonQuintuplePress() {
     if (_serial) {
-        bool newBitChatMode = !_serial->isBitChatMode();
-        _serial->setBitChatMode(newBitChatMode);
+        bool newBitchatMode = !_serial->isBitchatMode();
+        _serial->setBitchatMode(newBitchatMode);
         
         // LED feedback: 3 blinks
-        // Fast (150ms) = BitChat, Slow (500ms) = MeshCore
+        // Fast (150ms) = Bitchat, Slow (500ms) = MeshCore
         for (int i = 0; i < 3; i++) {
             digitalWrite(LED_PIN, HIGH);
-            delay(newBitChatMode ? 150 : 500);
+            delay(newBitchatMode ? 150 : 500);
             digitalWrite(LED_PIN, LOW);
-            delay(newBitChatMode ? 150 : 500);
+            delay(newBitchatMode ? 150 : 500);
         }
         
         // Buzzer acknowledgment
@@ -467,7 +467,7 @@ void handleButtonQuintuplePress() {
 
 **Button Action**: 5x rapid press (within ~3 seconds)
 **Feedback**:
-- LED: 3 blinks (fast = BitChat, slow = MeshCore)
+- LED: 3 blinks (fast = Bitchat, slow = MeshCore)
 - Buzzer: Acknowledgment tone (if available)
 
 ### Runtime Configuration
@@ -518,9 +518,9 @@ BitchatConfig {
 
 ### Planned Features
 
-1. **Simultaneous BLE Services**: Both MeshCore and BitChat active
+1. **Simultaneous BLE Services**: Both MeshCore and Bitchat active
 2. **Full DM Support**: End-to-end encrypted direct messages
-3. **Multi-Channel**: Support for arbitrary BitChat channels
+3. **Multi-Channel**: Support for arbitrary Bitchat channels
 4. **File Transfer**: Binary data over mesh
 
 ### Extension Points

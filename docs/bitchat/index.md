@@ -1,14 +1,14 @@
-# BitChat Integration for MeshCore
+# Bitchat Integration for MeshCore
 
 ## Overview
 
-The BitChat integration enables MeshCore devices to communicate with the BitChat Android app through a bridge layer that translates between BitChat protocol and MeshCore mesh networking. This is an **additive feature** that preserves all existing MeshCore functionality while adding BitChat compatibility.
+The Bitchat integration enables MeshCore devices to communicate with the Bitchat Android app through a bridge layer that translates between Bitchat protocol and MeshCore mesh networking. This is an **additive feature** that preserves all existing MeshCore functionality while adding Bitchat compatibility.
 
 ## Key Principles
 
-1. **Additive, Not Substitutive**: BitChat support is added alongside MeshCore, not replacing it
+1. **Additive, Not Substitutive**: Bitchat support is added alongside MeshCore, not replacing it
 2. **No Infrastructure Changes**: Repeaters and room servers require no modifications
-3. **Encapsulation Strategy**: BitChat messages are encapsulated in standard MeshCore packets
+3. **Encapsulation Strategy**: Bitchat messages are encapsulated in standard MeshCore packets
 4. **Backward Compatible**: Existing MeshCore nodes continue to work normally
 
 ## Architecture
@@ -35,10 +35,10 @@ The BitChat integration enables MeshCore devices to communicate with the BitChat
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                    SerialBLEInterface                               │ │
 │  │  • MeshCore UART Service (6E400001-B5A3-F393-E0A9-E50E24DCCA9E)    │ │
-│  │  • BitChat Service (F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C)        │ │
+│  │  • Bitchat Service (F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C)        │ │
 │  │  • Only ONE service advertised at a time                           │ │
 │  │  • Auto-disconnects clients on mode switch                         │ │
-│  │  • PIN auth (MeshCore) / Open access (BitChat)                    │ │
+│  │  • PIN auth (MeshCore) / Open access (Bitchat)                    │ │
 │  └────────────────────────────────┬───────────────────────────────────┘ │
 │                                   │                                      │
 │                       ┌───────────▼────────────┐                        │
@@ -68,13 +68,13 @@ The BitChat integration enables MeshCore devices to communicate with the BitChat
 | Button-based BLE mode switching | ✅ | ✅ |
 | Visual mode indicator (M/B) | ✅ | ✅ |
 | LED/buzzer feedback (button-only) | ✅ | ✅ |
-| BitChat BLE service | ✅ | ✅ |
+| Bitchat BLE service | ✅ | ✅ |
 | MeshCore UART service | ✅ | ✅ |
 | PIN authentication (MeshCore mode) | ✅ | ✅ |
-| Open access (BitChat mode) | ✅ | ✅ |
+| Open access (Bitchat mode) | ✅ | ✅ |
 
 ### With Display (Menu-Based)
-Navigate to the **BITCHAT** page and press **ENTER** to toggle between modes. Display shows large **M** (MeshCore) or **B** (BitChat).
+Navigate to the **BITCHAT** page and press **ENTER** to toggle between modes. Display shows large **M** (MeshCore) or **B** (Bitchat).
 
 ### Button-Only (T1000-E)
 Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. See [Button-Based Mode Switching](./button_ble_controller.md) for details.
@@ -86,15 +86,15 @@ Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. S
 | [Build Configuration](./build_configuration.md) | **ENABLE_BITCHAT flag**, build options, compilation settings |
 | [Device Compatibility](./compatibility_devices.md) | **Complete list** of compatible/incompatible devices |
 | [Button-Based Mode Switching](./button_ble_controller.md) | T1000-E and button-only device guide |
-| [Protocol Specification](./protocol_specification.md) | BitChat wire protocol format |
+| [Protocol Specification](./protocol_specification.md) | Bitchat wire protocol format |
 | [Encapsulation Format](./encapsulation_format.md) | MeshCore encapsulation header and format |
-| [Payloads](./payloads.md) | BitChat payload types and structures |
+| [Payloads](./payloads.md) | Bitchat payload types and structures |
 | [BLE Service](./ble_service.md) | BLE GATT service specification |
 | [Architecture](./architecture.md) | Component architecture and data flow |
 
 ## Quick Start
 
-### Enable BitChat (For Developers)
+### Enable Bitchat (For Developers)
 
 Add to your `platformio.ini`:
 
@@ -106,7 +106,7 @@ build_flags =
 
 ### Check Device Compatibility
 
-BitChat requires **either a display with buttons** OR **button-only with LED feedback** for mode switching.
+Bitchat requires **either a display with buttons** OR **button-only with LED feedback** for mode switching.
 
 | Status | Device Examples | Count |
 |--------|-----------------|-------|
@@ -118,50 +118,50 @@ BitChat requires **either a display with buttons** OR **button-only with LED fee
 
 ## Quick Start
 
-### Enable BitChat Support
+### Enable Bitchat Support
 
 ```bash
-# Build with BitChat support
+# Build with Bitchat support
 export ENABLE_BITCHAT=1
 pio run -e WioTrackerL1_companion_radio_ble
 ```
 
 ### Runtime Control
 
-BitChat mode is controlled **on-device** via the UI or button presses:
+Bitchat mode is controlled **on-device** via the UI or button presses:
 
 **With Display:**
 1. Navigate to **BITCHAT** page using LEFT/RIGHT buttons
-2. Press **ENTER** to toggle between MeshCore and BitChat modes
-3. Display shows large **M** (MeshCore) or **B** (BitChat)
+2. Press **ENTER** to toggle between MeshCore and Bitchat modes
+3. Display shows large **M** (MeshCore) or **B** (Bitchat)
 
 **Button-Only (T1000-E):**
 1. Press user button **5 times rapidly** (within ~3 seconds)
-2. LED blinks 3 times (fast=BitChat 150ms, slow=MeshCore 500ms)
+2. LED blinks 3 times (fast=Bitchat 150ms, slow=MeshCore 500ms)
 3. Buzzer plays acknowledgment tone (if available)
 
 **Note:** The device always boots in **MeshCore mode**. Mode is not persisted across reboots.
 
 ## Message Flow
 
-### BitChat → MeshCore
+### Bitchat → MeshCore
 
-1. BitChat app sends MESSAGE via BLE to `#mesh` channel
+1. Bitchat app sends MESSAGE via BLE to `#mesh` channel
 2. `BitchatBLEService` receives and parses message
 3. `BitchatBridge` formats for MeshCore with `📱` prefix
 4. Message sent as `PAYLOAD_TYPE_GRP_TXT` via mesh on `#mesh` channel
 
-### MeshCore → BitChat
+### MeshCore → Bitchat
 
 1. MeshCore receives group message on `#mesh` channel
 2. `BitchatBridge` verifies channel secret matches `SHA256("#mesh")`
-3. `BitchatBridge` detects non-BitChat origin (no `📱` prefix)
-4. Message formatted as BitChat MESSAGE with TLV payload
-5. Sent to BitChat app via BLE notification for `#mesh` channel
+3. `BitchatBridge` detects non-Bitchat origin (no `📱` prefix)
+4. Message formatted as Bitchat MESSAGE with TLV payload
+5. Sent to Bitchat app via BLE notification for `#mesh` channel
 
 ## #mesh Channel
 
-The `#mesh` hashtag channel is the primary interoperability channel between BitChat and MeshCore.
+The `#mesh` hashtag channel is the primary interoperability channel between Bitchat and MeshCore.
 
 ### Channel Key Derivation
 
@@ -172,7 +172,7 @@ The `#mesh` hashtag channel is the primary interoperability channel between BitC
 
 The channel secret is the **first 16 bytes** of the SHA256 hash of the UTF-8 encoded channel name string (including the `#` prefix).
 
-Both BitChat Android app and MeshCore firmware derive the same channel secret using this mechanism, enabling seamless group messaging.
+Both Bitchat Android app and MeshCore firmware derive the same channel secret using this mechanism, enabling seamless group messaging.
 
 ### Firmware Implementation
 
@@ -186,7 +186,7 @@ See [Protocol Specification](./protocol_specification.md#hashtag-channels) for t
 
 | Issue | Status | Workaround |
 |-------|--------|------------|
-| BLE Notification Freeze | ⚠️ Partial | MeshCore→BitChat notifications currently disabled on nRF52 |
+| BLE Notification Freeze | ⚠️ Partial | MeshCore→Bitchat notifications currently disabled on nRF52 |
 | Channel Hash Mismatch | ✅ Fixed | #mesh channel verified by full 32-byte secret |
 | Simultaneous BLE Services | ❌ HW Limit | Menu-based switching (both nRF52 and ESP32) |
 | DM Support | 🚧 Planned | Basic infrastructure in place |
@@ -200,12 +200,12 @@ Due to BLE advertising size constraints, both nRF52 and ESP32 platforms use **me
 1. Use **LEFT/RIGHT** keys to navigate to the **BITCHAT** page
 2. Display shows:
    - **"M"** with "MeshCore" text → MeshCore mode active
-   - **"B"** with "BitChat" text → BitChat mode active
+   - **"B"** with "Bitchat" text → Bitchat mode active
 3. Press **ENTER** to toggle between modes
 
 **Platform-Specific Implementation:**
-- **nRF52**: Switches advertisement data between Nordic UART and BitChat service UUIDs
-- **ESP32**: Uses `setBitChatMode()` to dynamically change advertised UUID via `SerialBLEInterface`
+- **nRF52**: Switches advertisement data between Nordic UART and Bitchat service UUIDs
+- **ESP32**: Uses `setBitchatMode()` to dynamically change advertised UUID via `SerialBLEInterface`
 
 Both platforms provide identical user experience for mode switching.
 
@@ -214,13 +214,13 @@ Both platforms provide identical user experience for mode switching.
 | Component | Compatibility |
 |-----------|--------------|
 | MeshCore Android App | ✅ Full (when in MeshCore BLE mode) |
-| BitChat Android App | ✅ Full (when in BitChat BLE mode) |
+| Bitchat Android App | ✅ Full (when in Bitchat BLE mode) |
 | MeshCore Repeaters | ✅ No changes required |
 | MeshCore Room Servers | ✅ No changes required |
 | Other MeshCore Nodes | ✅ Backward compatible |
 
 ## References
 
-- [BitChat Android App](https://github.com/bitchat/bitchat-android)
+- [Bitchat Android App](https://github.com/bitchat/bitchat-android)
 - MeshCore Companion Protocol: [../companion_protocol.md](../companion_protocol.md)
 - MeshCore Packet Structure: [../packet_structure.md](../packet_structure.md)

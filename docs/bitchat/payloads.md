@@ -1,6 +1,6 @@
-# BitChat Payloads
+# Bitchat Payloads
 
-This document defines the payload structures for BitChat messages transported through MeshCore.
+This document defines the payload structures for Bitchat messages transported through MeshCore.
 
 ## Important Notes
 
@@ -179,7 +179,7 @@ When `IS_COMPRESSED` flag is set, the payload is zlib/deflate compressed:
 compressed_payload = zlib_compress(raw_payload)
 ```
 
-Maximum compressed size: 245 bytes (BitChat wire limit)
+Maximum compressed size: 245 bytes (Bitchat wire limit)
 Maximum decompressed size: 2048 bytes
 
 ## TLV Type Reference
@@ -206,15 +206,15 @@ Maximum decompressed size: 2048 bytes
 | Wire payload | 245 bytes (compressed) |
 | Signature | 64 bytes |
 
-## MeshCore → BitChat Payload Translation
+## MeshCore → Bitchat Payload Translation
 
-When converting MeshCore messages to BitChat format:
+When converting MeshCore messages to Bitchat format:
 
 ### Group Messages
 
 MeshCore format: `[timestamp:4] [txt_type:1] [text]`
 
-BitChat format: 
+Bitchat format: 
 - TLV `0x10` with formatted text: `<sender>: <original_text>`
 - TLV `0x11` with channel name (if available)
 - Timestamp from original message
@@ -223,15 +223,15 @@ BitChat format:
 
 MeshCore format: Encrypted E2E payload
 
-BitChat format:
+Bitchat format:
 - Decrypt E2E payload
 - Extract text content
-- Create BitChat DM with `HAS_RECIPIENT` flag
+- Create Bitchat DM with `HAS_RECIPIENT` flag
 - Set recipient_id from contact mapping
 
-## BitChat → MeshCore Payload Translation
+## Bitchat → MeshCore Payload Translation
 
-When converting BitChat messages to MeshCore format:
+When converting Bitchat messages to MeshCore format:
 
 1. Parse TLV payload
 2. Extract text content

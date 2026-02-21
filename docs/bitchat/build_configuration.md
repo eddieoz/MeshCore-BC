@@ -1,14 +1,14 @@
-# BitChat Build Configuration
+# Bitchat Build Configuration
 
 ## Overview
 
-This document describes the build configuration options for enabling and customizing BitChat integration in MeshCore firmware.
+This document describes the build configuration options for enabling and customizing Bitchat integration in MeshCore firmware.
 
 ## ENABLE_BITCHAT Flag - Master Control
 
-The `ENABLE_BITCHAT` preprocessor flag is the **master switch** that controls whether BitChat support is compiled into the firmware.
+The `ENABLE_BITCHAT` preprocessor flag is the **master switch** that controls whether Bitchat support is compiled into the firmware.
 
-### Enabling BitChat
+### Enabling Bitchat
 
 Add the following to your `platformio.ini` build flags:
 
@@ -21,31 +21,31 @@ build_flags =
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `ENABLE_BITCHAT` | `1` | **Include** BitChat code and features |
-| `ENABLE_BITCHAT` | undefined | **Exclude** BitChat code (original firmware) |
+| `ENABLE_BITCHAT` | `1` | **Include** Bitchat code and features |
+| `ENABLE_BITCHAT` | undefined | **Exclude** Bitchat code (original firmware) |
 | `BLE_MODE_SWITCHING` | `1` | Enable menu-based BLE mode switching (required for UI) |
 
 ### How It Works
 
 When `ENABLE_BITCHAT=1` is defined:
-- ✅ BitChat BLE service code is compiled
+- ✅ Bitchat BLE service code is compiled
 - ✅ Menu-based BLE mode switching is available
 - ✅ `#mesh` channel support is enabled
-- ✅ BitChat message encapsulation/decapsulation is active
+- ✅ Bitchat message encapsulation/decapsulation is active
 - ⚠️ Firmware size increases by ~80KB Flash, ~25KB RAM
 
 When `ENABLE_BITCHAT` is **not defined**:
-- ✅ Original MeshCore firmware without BitChat
+- ✅ Original MeshCore firmware without Bitchat
 - ✅ Smaller binary size
 - ✅ All original functionality preserved
-- ❌ No BitChat compatibility
+- ❌ No Bitchat compatibility
 
 ### Backward Compatibility
 
-**Critical**: Omitting `ENABLE_BITCHAT` builds the **original firmware** exactly as before BitChat was added:
+**Critical**: Omitting `ENABLE_BITCHAT` builds the **original firmware** exactly as before Bitchat was added:
 
 ```ini
-; Original firmware without BitChat
+; Original firmware without Bitchat
 [env:MyDevice_companion_radio_ble]
 build_flags =
     ${base.build_flags}
@@ -57,17 +57,17 @@ This ensures existing devices continue to work without modifications.
 
 ### Code Guard Pattern
 
-All BitChat code is conditionally compiled:
+All Bitchat code is conditionally compiled:
 
 ```cpp
 // In MyMesh.cpp, main.cpp, etc.
 #ifdef ENABLE_BITCHAT
   #include <helpers/bitchat/BitchatBridge.h>
   
-  // BitChat bridge instance
+  // Bitchat bridge instance
   BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
   
-  // Initialize BitChat
+  // Initialize Bitchat
   bitchat_bridge.begin();
   the_mesh.initBitchat(&bitchat_bridge);
 #endif
@@ -75,7 +75,7 @@ All BitChat code is conditionally compiled:
 
 ## Device Compatibility
 
-BitChat requires **on-device UI navigation** (screen + buttons) to toggle between MeshCore and BitChat modes.
+Bitchat requires **on-device UI navigation** (screen + buttons) to toggle between MeshCore and Bitchat modes.
 
 ### Quick Summary
 
@@ -110,7 +110,7 @@ BitChat requires **on-device UI navigation** (screen + buttons) to toggle betwee
 
 ### Incompatible Devices (No Display)
 
-Popular devices that currently cannot use BitChat:
+Popular devices that currently cannot use Bitchat:
 
 | Device | Platform | Why Incompatible |
 |--------|----------|------------------|
@@ -119,13 +119,13 @@ Popular devices that currently cannot use BitChat:
 | RAK WisMesh Tag | nRF52 | No display - tag format |
 | Heltec CT62 | ESP32 | No display |
 
-**Future Support**: These devices may receive BitChat via CLI configuration in a future release.
+**Future Support**: These devices may receive Bitchat via CLI configuration in a future release.
 
 ## PlatformIO Configuration
 
 ### Build Environments
 
-#### With BitChat Support
+#### With Bitchat Support
 
 ```ini
 [env:WioTrackerL1_companion_radio_ble]
@@ -137,13 +137,13 @@ build_flags =
     -D BLE_MODE_SWITCHING=1
 ```
 
-#### Without BitChat (Standard)
+#### Without Bitchat (Standard)
 
 ```ini
 [env:WioTrackerL1_companion_radio_ble]
 extends = nrf52_base
 board = wio_tracker_l1
-; No ENABLE_BITCHAT flag - BitChat disabled
+; No ENABLE_BITCHAT flag - Bitchat disabled
 ```
 
 ### Native Test Environment
@@ -179,12 +179,12 @@ nRF52 uses the same menu-based switching UI as ESP32:
 ```cpp
 // In UITask.cpp - Identical for both platforms
 if (c == KEY_ENTER && _page == HomePage::BLE_MODE) {
-  if (_task->isBitChatMode()) {
-    _task->setBitChatMode(false);
+  if (_task->isBitchatMode()) {
+    _task->setBitchatMode(false);
     _task->showAlert("MeshCore Mode", 1000);
   } else {
-    _task->setBitChatMode(true);
-    _task->showAlert("BitChat Mode", 1000);
+    _task->setBitchatMode(true);
+    _task->showAlert("Bitchat Mode", 1000);
     the_mesh.initBitchatMeshChannel();
   }
 }
@@ -197,14 +197,14 @@ The mode is stored in `Bluefruit` advertising data and switched via the UI menu 
 | Component | Flash | RAM |
 |-----------|-------|-----|
 | Base MeshCore | ~400KB | ~60KB |
-| BitChat Addition | ~80KB | ~25KB |
-| Total with BitChat | ~480KB | ~85KB |
+| Bitchat Addition | ~80KB | ~25KB |
+| Total with Bitchat | ~480KB | ~85KB |
 
 **nRF52840 Limits**: 1MB Flash, 256KB RAM
 
 ### ESP32 Platform
 
-ESP32 supports BitChat through the `BitchatBLEService` class which attaches to the existing BLE server managed by `SerialBLEInterface`. Both ESP32 and nRF52 now support identical **menu-based mode switching**.
+ESP32 supports Bitchat through the `BitchatBLEService` class which attaches to the existing BLE server managed by `SerialBLEInterface`. Both ESP32 and nRF52 now support identical **menu-based mode switching**.
 
 ```ini
 build_flags =
@@ -215,19 +215,19 @@ build_flags =
 
 #### ESP32 BLE Initialization
 
-On ESP32, BitChat integrates with the existing BLE stack:
+On ESP32, Bitchat integrates with the existing BLE stack:
 
 ```cpp
 // In main.cpp - ESP32 initialization flow
 #ifdef ENABLE_BITCHAT
-  // Initialize BitChat bridge
+  // Initialize Bitchat bridge
   bitchat_bridge.begin();
   
   // Attach to existing BLE server
   if (serial_interface.getBLEServer() != nullptr) {
     mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
     bitchatService.initESP32(the_mesh.getNodeName());
-    serial_interface.setBitChatService(bitchatService.getESP32Service());
+    serial_interface.setBitchatService(bitchatService.getESP32Service());
   }
   
   the_mesh.initBitchat(&bitchat_bridge);
@@ -241,12 +241,12 @@ ESP32 supports **menu-based runtime mode switching** identical to nRF52:
 ```cpp
 // In UITask.cpp - Menu-based switching
 if (c == KEY_ENTER && _page == HomePage::BLE_MODE) {
-  if (_task->isBitChatMode()) {
-    _task->setBitChatMode(false);  // Switch to MeshCore
+  if (_task->isBitchatMode()) {
+    _task->setBitchatMode(false);  // Switch to MeshCore
     _task->showAlert("MeshCore Mode", 1000);
   } else {
-    _task->setBitChatMode(true);   // Switch to BitChat
-    _task->showAlert("BitChat Mode", 1000);
+    _task->setBitchatMode(true);   // Switch to Bitchat
+    _task->showAlert("Bitchat Mode", 1000);
     the_mesh.initBitchatMeshChannel();  // Prepare #mesh channel
   }
 }
@@ -255,7 +255,7 @@ if (c == KEY_ENTER && _page == HomePage::BLE_MODE) {
 **Implementation in `SerialBLEInterface`:**
 
 ```cpp
-void SerialBLEInterface::setBitChatMode(bool enable) {
+void SerialBLEInterface::setBitchatMode(bool enable) {
   if (_bitchatMode == enable) return;
   _bitchatMode = enable;
   
@@ -278,17 +278,17 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
 
 **UI Display:**
 - Navigate to **BLE_MODE** page using LEFT/RIGHT keys
-- Display shows **"M"** (MeshCore) or **""** (BitChat) with mode name
+- Display shows **"M"** (MeshCore) or **""** (Bitchat) with mode name
 - Press **ENTER** to toggle
-- Alert shows "MeshCore Mode" or "BitChat Mode" for 1 second
+- Alert shows "MeshCore Mode" or "Bitchat Mode" for 1 second
 
 #### ESP32 Memory Considerations
 
 | Component | Flash | RAM |
 |-----------|-------|-----|
 | Base MeshCore | ~800KB | ~100KB |
-| BitChat Addition | ~80KB | ~25KB |
-| Total with BitChat | ~880KB | ~125KB |
+| Bitchat Addition | ~80KB | ~25KB |
+| Total with Bitchat | ~880KB | ~125KB |
 
 **ESP32 Limits**: 4MB+ Flash, 520KB RAM
 
@@ -298,11 +298,11 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
 |---------|-------|-------|
 | BLE Stack | ESP-IDF NimBLE | Nordic SoftDevice |
 | Service Creation | `initESP32()` attaches to existing server | `initNRF52()` creates standalone |
-| Mode Switching | Menu-based `setBitChatMode()` | Menu-based `setBitChatMode()` |
+| Mode Switching | Menu-based `setBitchatMode()` | Menu-based `setBitchatMode()` |
 | Menu Navigation | LEFT/RIGHT to BLE_MODE, ENTER to toggle | LEFT/RIGHT to BLE_MODE, ENTER to toggle |
 | Visual Indicator | "M" / "" on display | "M" / "" on display |
 | MTU Handling | Automatic | Manual negotiation |
-| Security | Open (BitChat) / PIN (MeshCore) | Open (BitChat) / PIN (MeshCore) |
+| Security | Open (Bitchat) / PIN (MeshCore) | Open (Bitchat) / PIN (MeshCore) |
 
 **Platform Parity**: Both ESP32 and nRF52 now support identical menu-based BLE mode switching UX. The only difference is the underlying BLE stack implementation (NimBLE vs SoftDevice).
 
@@ -323,19 +323,19 @@ Debug levels:
 
 | Flag | Output |
 |------|--------|
-| `BITCHAT_DEBUG` | BitChat-specific messages |
+| `BITCHAT_DEBUG` | Bitchat-specific messages |
 | `MESH_DEBUG` | General mesh debug |
 | `BLE_DEBUG_LOGGING` | BLE communication debug |
 
 ### Debug Output Example
 
 ```
-[BitChat] Bridge initialized
-[BitChat] Peer ID set: 0xA1B2C3D4E5F6A7B8
-[BitChat] Received message from BLE, type=2
-[BitChat] Processing message from BLE queue
-[BitChat] Sending GRP_TXT to mesh, len=42
-[BitChat] Message sent to mesh as GRP_TXT!
+[Bitchat] Bridge initialized
+[Bitchat] Peer ID set: 0xA1B2C3D4E5F6A7B8
+[Bitchat] Received message from BLE, type=2
+[Bitchat] Processing message from BLE queue
+[Bitchat] Sending GRP_TXT to mesh, len=42
+[Bitchat] Message sent to mesh as GRP_TXT!
 ```
 
 ## Feature Flags
@@ -411,15 +411,15 @@ build_flags =
 **ESP32-specific features:**
 - Menu-based BLE mode switching (identical to nRF52)
 - `BLECharacteristicCallbacks` for event handling
-- Dynamic UUID switching via `setBitChatMode()`
+- Dynamic UUID switching via `setBitchatMode()`
 - Compatible with Heltec V3 OLED display for mode indication
 
 ## Build Commands
 
-### Build with BitChat
+### Build with Bitchat
 
 ```bash
-# Build for specific board with BitChat
+# Build for specific board with Bitchat
 pio run -e WioTrackerL1_companion_radio_ble
 
 # Build with custom flags
@@ -450,7 +450,7 @@ pio run -e WioTrackerL1_companion_radio_ble --target inspect
 
 ### Configuration File
 
-BitChat runtime configuration is stored in `/config/bitchat.cfg`:
+Bitchat runtime configuration is stored in `/config/bitchat.cfg`:
 
 ```cpp
 struct BitchatConfig {
@@ -505,13 +505,13 @@ build_flags =
 
 ### Build Verification
 
-Check that BitChat is properly included:
+Check that Bitchat is properly included:
 
 ```bash
 # Check preprocessor defines
 pio run -e WioTrackerL1_companion_radio_ble --target compiledb
 
-# Search for BitChat symbols
+# Search for Bitchat symbols
 nm .pio/build/*/firmware.elf | grep Bitchat
 ```
 
@@ -520,7 +520,7 @@ nm .pio/build/*/firmware.elf | grep Bitchat
 ### GitHub Actions
 
 ```yaml
-name: Build BitChat Firmware
+name: Build Bitchat Firmware
 
 on:
   push:
@@ -535,7 +535,7 @@ jobs:
       - name: Setup PlatformIO
         uses: platformio/action@v1
         
-      - name: Build with BitChat
+      - name: Build with Bitchat
         run: |
           pio run -e WioTrackerL1_companion_radio_ble
           

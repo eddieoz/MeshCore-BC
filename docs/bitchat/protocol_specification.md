@@ -1,12 +1,12 @@
-# BitChat Protocol Specification
+# Bitchat Protocol Specification
 
 ## Overview
 
-This document specifies the BitChat wire protocol used for communication between the BitChat Android app and MeshCore devices via BLE.
+This document specifies the Bitchat wire protocol used for communication between the Bitchat Android app and MeshCore devices via BLE.
 
 ## Message Structure
 
-All BitChat messages follow a common header format:
+All Bitchat messages follow a common header format:
 
 | Field | Size (bytes) | Description |
 |-------|--------------|-------------|
@@ -51,7 +51,7 @@ All BitChat messages follow a common header format:
 
 ## Payload TLV Format
 
-BitChat payloads use Type-Length-Value (TLV) encoding:
+Bitchat payloads use Type-Length-Value (TLV) encoding:
 
 | Field | Size (bytes) | Description |
 |-------|--------------|-------------|
@@ -119,7 +119,7 @@ Flags: `HAS_RECIPIENT` must be set, `recipient_id` field present.
 
 ## Peer ID Derivation
 
-BitChat peer IDs are derived from Ed25519 public keys:
+Bitchat peer IDs are derived from Ed25519 public keys:
 
 ```
 peer_id = first 8 bytes of Ed25519 public key
@@ -161,7 +161,7 @@ Messages are signed with Ed25519 using the following serialization:
 
 ## Time Synchronization
 
-BitChat uses Unix timestamps in milliseconds. Devices synchronize time via:
+Bitchat uses Unix timestamps in milliseconds. Devices synchronize time via:
 
 1. Receiving ANNOUNCE or MESSAGE with timestamp
 2. Validating timestamp (2020+ and not >30 minutes future)
@@ -172,11 +172,11 @@ Time sync threshold: 30 seconds difference triggers update.
 
 ## Hashtag Channels
 
-BitChat supports public hashtag channels (e.g., `#mesh`). These channels use a deterministic key derivation mechanism based on the channel name.
+Bitchat supports public hashtag channels (e.g., `#mesh`). These channels use a deterministic key derivation mechanism based on the channel name.
 
 ### #mesh Channel
 
-The `#mesh` channel is the primary public channel for BitChat-MeshCore interoperability.
+The `#mesh` channel is the primary public channel for Bitchat-MeshCore interoperability.
 
 #### Channel Secret Derivation
 
@@ -220,7 +220,7 @@ bool BitchatBridge::isMeshChannel(const mesh::GroupChannel& channel) const {
 }
 ```
 
-Only messages from the `#mesh` channel are forwarded to the BitChat BLE interface.
+Only messages from the `#mesh` channel are forwarded to the Bitchat BLE interface.
 
 #### MyMesh Channel Initialization
 
@@ -306,6 +306,6 @@ For example:
 
 ## BLE Transport
 
-BitChat messages are sent over BLE as GATT notifications on the BitChat service characteristic. Messages may be fragmented if larger than MTU (typically 185-512 bytes).
+Bitchat messages are sent over BLE as GATT notifications on the Bitchat service characteristic. Messages may be fragmented if larger than MTU (typically 185-512 bytes).
 
 See [BLE Service Specification](./ble_service.md) for GATT service details.

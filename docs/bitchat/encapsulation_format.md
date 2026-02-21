@@ -1,10 +1,10 @@
-# BitChat Encapsulation in MeshCore
+# Bitchat Encapsulation in MeshCore
 
-This document specifies how BitChat messages are encapsulated within standard MeshCore packets for transport over the mesh network.
+This document specifies how Bitchat messages are encapsulated within standard MeshCore packets for transport over the mesh network.
 
 ## Overview
 
-BitChat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore packets. This allows BitChat messages to be transported through the mesh without requiring any modifications to repeaters or room servers.
+Bitchat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore packets. This allows Bitchat messages to be transported through the mesh without requiring any modifications to repeaters or room servers.
 
 ## Encapsulation Strategy
 
@@ -15,7 +15,7 @@ BitChat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore 
 │ Channel Hash (1 byte)                                       │
 │ MAC + Encrypted Data:                                       │
 │   ┌─────────────────────────────────────────────────────┐  │
-│   │ BitChat Encapsulation Header (14 bytes):           │  │
+│   │ Bitchat Encapsulation Header (14 bytes):           │  │
 │   │   - Magic: "BC\x00\x00" (4 bytes)                  │  │
 │   │   - Version: 0x01 (1 byte)                         │  │
 │   │   - Flags: compression, fragmentation (1 byte)     │  │
@@ -23,7 +23,7 @@ BitChat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore 
 │   │   - Message ID (4 bytes)                           │  │
 │   │   - Fragment Info (2 bytes)                        │  │
 │   ├─────────────────────────────────────────────────────┤  │
-│   │ BitChat Serialized Message Data (up to 170 bytes)  │  │
+│   │ Bitchat Serialized Message Data (up to 170 bytes)  │  │
 │   └─────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
         ↑
@@ -39,7 +39,7 @@ BitChat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore 
 | magic | 4 | `0x42430000` (ASCII "BC\0\0") |
 | version | 1 | Encapsulation format version (1) |
 | flags | 1 | Compression and fragmentation flags |
-| original_len | 2 | Original BitChat message length before encapsulation (little-endian) |
+| original_len | 2 | Original Bitchat message length before encapsulation (little-endian) |
 | message_id | 4 | Unique message identifier for reassembly (little-endian) |
 | fragment_num | 1 | Fragment number (0 = unfragmented, 1+ = fragment index) |
 | total_fragments | 1 | Total fragments (1 = unfragmented) |
@@ -50,7 +50,7 @@ BitChat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore 
 
 | Bit | Mask | Name | Description |
 |-----|------|------|-------------|
-| 0 | `0x01` | COMPRESSED | BitChat payload is zlib compressed |
+| 0 | `0x01` | COMPRESSED | Bitchat payload is zlib compressed |
 | 1 | `0x02` | FRAGMENTED | Message is fragmented across multiple packets |
 
 ## Complete Encapsulated Structure
@@ -59,14 +59,14 @@ BitChat messages are encapsulated using `PAYLOAD_TYPE_GRP_DATA` (0x06) MeshCore 
 |-------|--------------|-------------|
 | channel_hash | 1 | First byte of SHA256(channel_secret) |
 | cipher_mac | 2 | MAC for encrypted data |
-| encapsulation_header | 14 | BitChat encapsulation header |
-| bitchat_message | 0-170 | Serialized BitChat message (or fragment) |
+| encapsulation_header | 14 | Bitchat encapsulation header |
+| bitchat_message | 0-170 | Serialized Bitchat message (or fragment) |
 
-**Maximum BitChat data per packet**: 170 bytes (184 - 14 header)
+**Maximum Bitchat data per packet**: 170 bytes (184 - 14 header)
 
 ## Fragmentation
 
-For BitChat messages larger than 170 bytes, fragmentation is used:
+For Bitchat messages larger than 170 bytes, fragmentation is used:
 
 ### Fragment Calculation
 
@@ -111,11 +111,11 @@ max_fragments = 4 (implementation limit)
 max_message_size = 4 × 170 = 680 bytes
 ```
 
-Note: BitChat's native maximum is 2048 bytes (2KB). Large messages may require application-layer handling.
+Note: Bitchat's native maximum is 2048 bytes (2KB). Large messages may require application-layer handling.
 
 ## Encryption
 
-The encapsulation header and BitChat message are encrypted together using the MeshCore group channel encryption:
+The encapsulation header and Bitchat message are encrypted together using the MeshCore group channel encryption:
 
 ```
 encrypted_data = AES-CTR(encapsulation_header || bitchat_message, 
@@ -131,18 +131,18 @@ When receiving a `PAYLOAD_TYPE_GRP_DATA` packet:
 
 1. Decrypt payload using channel secret
 2. Check first 4 bytes for magic `0x42430000`
-3. If magic matches, process as BitChat encapsulated
+3. If magic matches, process as Bitchat encapsulated
 4. Extract encapsulation header fields
 5. If fragmented, buffer for reassembly
-6. Deserialize BitChat message from data portion
-7. Forward to BitChat BLE service
+6. Deserialize Bitchat message from data portion
+7. Forward to Bitchat BLE service
 
 ### Decapsulation Status Codes
 
 | Code | Name | Description |
 |------|------|-------------|
 | 0 | SUCCESS | Successfully decapsulated |
-| 1 | NOT_BITCHAT | No BitChat magic header |
+| 1 | NOT_BITCHAT | No Bitchat magic header |
 | 2 | INVALID_PACKET | Packet too short or malformed |
 | 3 | VERSION_MISMATCH | Unsupported encapsulation version |
 | 4 | DECRYPTION_FAILED | Decryption error |
@@ -163,8 +163,8 @@ The encapsulation strategy ensures repeaters forward packets transparently:
 |-----------|----------|
 | Repeater | Forwards without decryption |
 | Room Server | Forwards without decryption |
-| Companion (no BitChat) | Decrypts but ignores (no BitChat magic) |
-| Companion (with BitChat) | Decrypts and forwards to app |
+| Companion (no Bitchat) | Decrypts but ignores (no Bitchat magic) |
+| Companion (with Bitchat) | Decrypts and forwards to app |
 
 ## Implementation Reference
 
@@ -180,7 +180,7 @@ See source files:
 ```
 MeshCore payload limit:        184 bytes
 Encapsulation header:           14 bytes
-Available for BitChat:         170 bytes
+Available for Bitchat:         170 bytes
 Overhead:                        8.2%
 ```
 

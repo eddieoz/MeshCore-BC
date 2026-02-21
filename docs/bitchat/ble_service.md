@@ -1,15 +1,15 @@
-# BitChat BLE Service Specification
+# Bitchat BLE Service Specification
 
 ## Overview
 
-The BitChat BLE Service provides a GATT interface for the BitChat Android app to communicate with MeshCore devices. This service operates independently from the MeshCore UART service and can be activated via **menu-based switching** (devices with displays) or **button-based switching** (T1000-E and button-only devices).
+The Bitchat BLE Service provides a GATT interface for the Bitchat Android app to communicate with MeshCore devices. This service operates independently from the MeshCore UART service and can be activated via **menu-based switching** (devices with displays) or **button-based switching** (T1000-E and button-only devices).
 
 ## Service UUID
 
 | Attribute | Value |
 |-----------|-------|
 | Service UUID | `F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C` |
-| Service Name | BitChat Service |
+| Service Name | Bitchat Service |
 
 ## GATT Characteristics
 
@@ -26,11 +26,11 @@ The BitChat BLE Service provides a GATT interface for the BitChat Android app to
 Due to BLE advertising size limitations (31 bytes), both nRF52 and ESP32 platforms use **menu-based switching** between BLE modes:
 
 ```
-MeshCore Mode          BitChat Mode
+MeshCore Mode          Bitchat Mode
     │                      │
     ▼                      ▼
 ┌──────────┐           ┌──────────┐
-│ Nordic   │           │ BitChat  │
+│ Nordic   │           │ Bitchat  │
 │ UART     │           │ Service  │
 │ 6E40...  │    ◄──►   │ F47B...  │
 │ PIN auth │           │ Open     │
@@ -45,9 +45,9 @@ MeshCore Mode          BitChat Mode
 1. Press **LEFT/RIGHT** to navigate to the **BITCHAT** page
 2. Display shows current mode:
    - **"M"** = MeshCore mode (Nordic UART service on nRF52, UART on ESP32)
-   - **"B"** = BitChat mode (BitChat service)
+   - **"B"** = Bitchat mode (Bitchat service)
 3. Press **ENTER** to toggle between modes
-4. Alert displays "MeshCore Mode" or "BitChat Mode" for 1 second
+4. Alert displays "MeshCore Mode" or "Bitchat Mode" for 1 second
 
 ### Button-Based Switching (T1000-E)
 
@@ -56,9 +56,9 @@ For button-only devices without displays:
 **Action**: Press user button **5 times rapidly** (within ~3 seconds)
 
 **Feedback**:
-- LED: 3 blinks (fast 150ms = BitChat, slow 500ms = MeshCore)
+- LED: 3 blinks (fast 150ms = Bitchat, slow 500ms = MeshCore)
 - Buzzer: Acknowledgment tone (if available)
-- Serial: "[BLE] Switched to BitChat/MeshCore mode"
+- Serial: "[BLE] Switched to Bitchat/MeshCore mode"
 
 ### Platform-Specific Switching
 
@@ -92,10 +92,10 @@ Bluefruit.Advertising.start();
 
 #### ESP32
 
-On ESP32, mode switching uses `SerialBLEInterface::setBitChatMode()`:
+On ESP32, mode switching uses `SerialBLEInterface::setBitchatMode()`:
 
 ```cpp
-void SerialBLEInterface::setBitChatMode(bool enable) {
+void SerialBLEInterface::setBitchatMode(bool enable) {
     if (_bitchatMode == enable) return;
     _bitchatMode = enable;
     
@@ -136,7 +136,7 @@ When switching modes, the device **automatically disconnects all connected BLE c
 
 1. **Immediate mode enforcement**: Connected phones cannot continue using the old mode
 2. **Clean service transition**: Phone must reconnect to the new service
-3. **No cross-mode contamination**: MeshCore app can't send after switching to BitChat
+3. **No cross-mode contamination**: MeshCore app can't send after switching to Bitchat
 
 **Implementation details:**
 - Disconnect happens **before** advertising stops
@@ -154,15 +154,15 @@ When switching modes, the device **automatically disconnects all connected BLE c
 | Mode | Authentication | Bonding |
 |------|---------------|---------|
 | MeshCore | PIN required | Optional |
-| BitChat | None | None |
+| Bitchat | None | None |
 
-Note: BitChat uses its own cryptographic signatures for message authenticity, not BLE security.
+Note: Bitchat uses its own cryptographic signatures for message authenticity, not BLE security.
 
 ## Message Transport
 
 ### Receiving Messages (Android → Device)
 
-1. Android app writes BitChat message to characteristic
+1. Android app writes Bitchat message to characteristic
 2. Device receives write callback
 3. Data appended to receive buffer
 4. Processed in main loop (deferred processing)
@@ -170,7 +170,7 @@ Note: BitChat uses its own cryptographic signatures for message authenticity, no
 
 ### Sending Messages (Device → Android)
 
-1. `BitchatBridge` creates BitChat MESSAGE
+1. `BitchatBridge` creates Bitchat MESSAGE
 2. Message serialized to bytes
 3. Notification sent via `characteristic.notify()`
 4. Android app receives notification
@@ -311,7 +311,7 @@ bool initESP32(const char* deviceName) {
     // Get existing BLE server from SerialBLEInterface
     BLEServer* server = BLEDevice::getServer();
     
-    // Create BitChat service
+    // Create Bitchat service
     _platformService = server->createService(BITCHAT_SERVICE_UUID);
     
     // Create characteristic with READ, WRITE, NOTIFY properties
@@ -435,7 +435,7 @@ Large messages may need fragmentation at the application layer.
 ### Connection Test
 
 ```bash
-# Scan for BitChat service
+# Scan for Bitchat service
 hcitool lescan | grep F47B5E2D
 
 # Connect and read characteristic

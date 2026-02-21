@@ -2,7 +2,7 @@
 
 ## Overview
 
-This feature provides button-based BLE mode switching (MeshCore ↔ BitChat) for devices **without displays** but with physical buttons. This enables users to switch between MeshCore UART mode and BitChat BLE mode using button presses, with LED and buzzer feedback for mode indication.
+This feature provides button-based BLE mode switching (MeshCore ↔ Bitchat) for devices **without displays** but with physical buttons. This enables users to switch between MeshCore UART mode and Bitchat BLE mode using button presses, with LED and buzzer feedback for mode indication.
 
 ## Target Devices
 
@@ -24,7 +24,7 @@ Press the user button **5 times rapidly** (within ~3 seconds total) to toggle be
 ```
 User Action: [PRESS][RELEASE] x 5 times
                     ↓
-        Mode Toggles: MeshCore ↔ BitChat
+        Mode Toggles: MeshCore ↔ Bitchat
                     ↓
     Feedback: LED blinks 3x + Buzzer tone
 ```
@@ -36,7 +36,7 @@ The LED provides visual confirmation of the mode change:
 | Mode | Pattern | Description |
 |------|---------|-------------|
 | **MeshCore** | 3 slow blinks | 500ms ON, 500ms OFF |
-| **BitChat** | 3 fast blinks | 150ms ON, 150ms OFF |
+| **Bitchat** | 3 fast blinks | 150ms ON, 150ms OFF |
 
 ### Audio Feedback (Buzzer)
 
@@ -64,7 +64,7 @@ For devices with `NullDisplayDriver` (like T1000-E), the implementation uses **U
 │  └──────────────┘    └────────┬─────────┘                  │
 │                               ↓                             │
 │                    ┌─────────────────────┐                 │
-│                    │ setBitChatMode()    │                 │
+│                    │ setBitchatMode()    │                 │
 │                    │ + LED Feedback      │                 │
 │                    └─────────────────────┘                 │
 └─────────────────────────────────────────────────────────────┘
@@ -87,16 +87,16 @@ The mode switching is handled in `UITask::handleButtonQuintuplePress()` when:
 void UITask::handleButtonQuintuplePress() {
 #ifdef ENABLE_BITCHAT
   if (_serial) {
-    bool newBitChatMode = !_serial->isBitChatMode();
-    _serial->setBitChatMode(newBitChatMode);
+    bool newBitchatMode = !_serial->isBitchatMode();
+    _serial->setBitchatMode(newBitchatMode);
     
     // LED feedback - 3 blinks
     #ifdef LED_PIN
     for (int i = 0; i < 3; i++) {
       digitalWrite(LED_PIN, HIGH);
-      delay(newBitChatMode ? 150 : 500);
+      delay(newBitchatMode ? 150 : 500);
       digitalWrite(LED_PIN, LOW);
-      delay(newBitChatMode ? 150 : 500);
+      delay(newBitchatMode ? 150 : 500);
     }
     #endif
     
@@ -197,21 +197,21 @@ pio run -e your_device_companion_radio_ble
 
 ### Mode Not Switching
 
-- Verify BitChat is enabled: `ENABLE_BITCHAT=1`
+- Verify Bitchat is enabled: `ENABLE_BITCHAT=1`
 - Verify BLE is enabled: `BLE_PIN_CODE` defined
-- Check serial output for "[BLE] Switched to BitChat mode" or "[BLE] Switched to MeshCore mode"
+- Check serial output for "[BLE] Switched to Bitchat mode" or "[BLE] Switched to MeshCore mode"
 
 ## User Guide
 
-### Switching to BitChat Mode
+### Switching to Bitchat Mode
 
 1. Press the button **5 times rapidly** (within ~3 seconds total)
 2. Wait for feedback:
-   - **3 fast LED blinks** = BitChat mode active
+   - **3 fast LED blinks** = Bitchat mode active
    - **Buzzer tone** = Acknowledgment (if buzzer present)
-   - Serial log: "[BLE] Switched to BitChat mode"
-3. Open BitChat app on your phone
-4. Connect to the device (it will advertise as BitChat-compatible)
+   - Serial log: "[BLE] Switched to Bitchat mode"
+3. Open Bitchat app on your phone
+4. Connect to the device (it will advertise as Bitchat-compatible)
 
 ### Switching Back to MeshCore Mode
 
@@ -235,7 +235,7 @@ pio run -e your_device_companion_radio_ble
 │  │  Buzzer: ♪ Acknowledgment tone                      │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                             │
-│  BitChat Mode                                              │
+│  Bitchat Mode                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  LED: ▄▀▄▀▄▀  (fast blink: 150ms on/off)             │  │
 │  │  Buzzer: ♪ Acknowledgment tone                      │  │
@@ -256,6 +256,6 @@ pio run -e your_device_companion_radio_ble
 
 ## See Also
 
-- [BitChat Compatibility](./compatibility_devices.md)
-- [BitChat Build Configuration](./build_configuration.md)
+- [Bitchat Compatibility](./compatibility_devices.md)
+- [Bitchat Build Configuration](./build_configuration.md)
 - [T1000-E Variant](../../variants/t1000-e/)

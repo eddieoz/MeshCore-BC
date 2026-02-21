@@ -1,8 +1,8 @@
-# BitChat Device Compatibility
+# Bitchat Device Compatibility
 
 ## Overview
 
-BitChat support requires either **on-device UI navigation** (screen + buttons) or **button-based mode switching** to toggle between MeshCore and BitChat BLE modes. This page lists all compatible and incompatible devices.
+Bitchat support requires either **on-device UI navigation** (screen + buttons) or **button-based mode switching** to toggle between MeshCore and Bitchat BLE modes. This page lists all compatible and incompatible devices.
 
 ## Compatible Devices (35 Total)
 
@@ -77,16 +77,16 @@ These devices use **button-based mode switching** (5x press) with LED/buzzer fee
 | 2 | **RAK WisMesh Tag** | `rak_wismesh_tag` | ✓ | ✓ RGB | ✓ | Planned | - |
 | 3 | MinewSemi ME25LS01 | `minewsemi_me25ls01` | ✓ | ✓ RGB | ✗ | Planned | - |
 
-**Usage:** Press the user button **5 times rapidly** (within ~3 seconds) to toggle between MeshCore and BitChat modes.
+**Usage:** Press the user button **5 times rapidly** (within ~3 seconds) to toggle between MeshCore and Bitchat modes.
 - 3 slow LED blinks (500ms) = MeshCore mode
-- 3 fast LED blinks (150ms) = BitChat mode
+- 3 fast LED blinks (150ms) = Bitchat mode
 - Buzzer acknowledgment tone on mode switch (if available)
 
 **Note:** T1000-E uses `USER_BTN_PRESSED=LOW` as the button is active LOW.
 
 ## Incompatible Devices (No Display/No Button)
 
-These devices **cannot** currently use BitChat due to lack of screen and buttons. They may receive CLI-based configuration in a future release.
+These devices **cannot** currently use Bitchat due to lack of screen and buttons. They may receive CLI-based configuration in a future release.
 
 ### ESP32 (No Display)
 
@@ -110,7 +110,7 @@ These devices **cannot** currently use BitChat due to lack of screen and buttons
 
 ### STM32/RP2040 (Not Supported)
 
-BitChat is currently only supported on ESP32 and nRF52 platforms.
+Bitchat is currently only supported on ESP32 and nRF52 platforms.
 
 | Device | Platform | Reason |
 |--------|----------|--------|
@@ -134,10 +134,10 @@ If you see:
 ### Method 2: Build and Check
 
 ```bash
-# Try building your device with BitChat
+# Try building your device with Bitchat
 pio run -e YOUR_DEVICE_companion_radio_ble
 
-# If it builds successfully and you see BitChat symbols, it's compatible
+# If it builds successfully and you see Bitchat symbols, it's compatible
 nm .pio/build/YOUR_DEVICE_companion_radio_ble/firmware.elf | grep -i bitchat
 ```
 
@@ -160,10 +160,10 @@ If your device has a display and buttons but is not listed:
 
 ## Future Support for Display-Less Devices
 
-Devices without displays or buttons may receive BitChat support through:
+Devices without displays or buttons may receive Bitchat support through:
 
 - **CLI Configuration**: `bitchat enable` command via serial
-- **Startup Mode**: Default to BitChat mode on boot
+- **Startup Mode**: Default to Bitchat mode on boot
 - **Companion App**: Configure via USB/BLE from phone
 
 Planned for future releases. Priority will be given to popular devices like:
@@ -172,6 +172,6 @@ Planned for future releases. Priority will be given to popular devices like:
 
 ## See Also
 
-- [Build Configuration](./build_configuration.md) - How to enable BitChat
+- [Build Configuration](./build_configuration.md) - How to enable Bitchat
 - [BLE Service](./ble_service.md) - Technical BLE specifications
-- [Architecture](./architecture.md) - How BitChat integration works
+- [Architecture](./architecture.md) - How Bitchat integration works
