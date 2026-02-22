@@ -266,6 +266,7 @@ private:
 // Common UUIDs
 constexpr const char* MESHCORE_UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 constexpr const char* BITCHAT_SERVICE_UUID = "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C";
+constexpr const char* BITCHAT_CHARACTERISTIC_UUID = "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5D";
 
 } // namespace ble
 } // namespace mesh

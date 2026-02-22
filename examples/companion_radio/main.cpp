@@ -106,12 +106,8 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
 BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
 #endif
 
-// ButtonBLEController for button-only devices (no display at all, no DISPLAY_CLASS)
-// For devices with NullDisplayDriver, use UITask's button handling instead
-#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
-#include <helpers/ButtonBLEController.h>
-ButtonBLEController button_ble_controller(&serial_interface);
-#endif
+// Button-based BLE mode switching for button-only devices is handled by UITask
+// See handleButtonQuintuplePress() in UITask.cpp for the implementation
 
 /* END GLOBAL OBJECTS */
 
@@ -299,11 +295,7 @@ void setup() {
   ui_task.begin(disp, &sensors, the_mesh.getNodePrefs());  // still want to pass this in as dependency, as prefs might be moved
 #endif
 
-// Initialize ButtonBLEController for button-only BLE devices (no DISPLAY_CLASS at all)
-#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
-  button_ble_controller.begin();
-  Serial.println("[Main] ButtonBLEController initialized for button-only mode switching");
-#endif
+
 }
 
 void loop() {
@@ -313,10 +305,7 @@ void loop() {
   ui_task.loop();
 #endif
 
-// Update ButtonBLEController for button-only BLE devices (no DISPLAY_CLASS at all)
-#if defined(ENABLE_BITCHAT) && defined(BLE_PIN_CODE) && !defined(DISPLAY_CLASS) && defined(PIN_USER_BTN)
-  button_ble_controller.loop();
-#endif
+
 
   rtc_clock.tick();
 }

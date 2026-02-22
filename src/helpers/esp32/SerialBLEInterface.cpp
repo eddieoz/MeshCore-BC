@@ -199,15 +199,11 @@ void SerialBLEInterface::setBitChatMode(bool enable) {
   if (pServer->getConnectedCount() > 0) {
     Serial.println("[BLE] Disconnecting connected client(s) for mode switch...");
     
-    // Get current connection count (it changes as we disconnect)
-    int connCount = pServer->getConnectedCount();
-    
-    // Disconnect all connected clients
-    for (int i = 0; i < connCount; i++) {
-      uint16_t connId = pServer->getConnIdByIndex(0); // Always get index 0 as array shrinks
-      if (connId != BLE_HS_CONN_HANDLE_NONE) {
-        pServer->disconnect(connId);
-      }
+    // Get all connected peer devices and disconnect them
+    auto peerDevices = pServer->getPeerDevices(true); // true = as server
+    for (auto &peer : peerDevices) {
+      uint16_t connId = peer.first;
+      pServer->disconnect(connId);
     }
     
     // Wait for disconnection to complete (poll with timeout)
