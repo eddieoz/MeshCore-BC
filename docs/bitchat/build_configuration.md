@@ -81,32 +81,32 @@ Bitchat requires **on-device UI navigation** (screen + buttons) to toggle betwee
 
 | Status | Count | Examples |
 |--------|-------|----------|
-| ✅ **Compatible (with display)** | **43 devices** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. |
-| ✅ **Compatible (button-only)** | **1 device** | T1000-E |
-| ❌ **Incompatible** | **14+ devices** | Xiao C3/nRF52, devices without screens or buttons |
+| ✅ **Compatible (with display)** | **41 devices** | Heltec V3/V4, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. |
+| ✅ **Compatible (button-only)** | **2 devices** | T1000-E, RAK WisMesh Tag |
+| ❌ **Incompatible** | **20+ devices** | ESP32 320KB (Heltec v2, T-Beam), no display devices, Xiao series |
 
 ### 📋 Complete Device List
 
 **[See compatibility_devices.md for the complete list](./compatibility_devices.md)** of:
-- All 35 compatible ESP32/nRF52 devices with build environments
-- All 15+ incompatible devices and reasons
+- All 41 compatible ESP32-S3/nRF52 devices with build environments
+- All 20+ incompatible devices and reasons (including ESP32 320KB devices)
 - How to check if your device is compatible
 - How to request support for new devices
 
 ### Compatible Device Categories
 
-**ESP32 Devices (33 total):**
-- Heltec series: V2, V3, V4, Tracker, Wireless Paper
-- LilyGo series: T-Deck, T-Echo, T3-S3, T-Beam variants
-- RAK modules: RAK3112, RAK3401
-- And more: Station G2, Mesh Pocket, Nano G2 Ultra, etc.
+**ESP32-S3 Devices (19 total):**
+- Heltec series: V3, V4, WSL3, Tracker, Wireless Paper
+- LilyGo series: T-Deck, T3-S3, T-Beam Supreme (S3)
+- And more: Station G2, Xiao S3 WIO, ThinkNode M1/M2/M3/M5, ProMicro
 
-**nRF52 Devices (10 total):**
+**nRF52 Devices (20 total):**
 - Wio Tracker L1 (LCD and E-ink variants)
-- RAK4631
-- Heltec T114
-- Ikoka Stick/Handheld variants
-- ThinkNode M1/M2/M5
+- RAK4631, RAK3112, RAK3401
+- Heltec T114, T190, Mesh Solar
+- Ikoka Stick/Nano variants
+- ThinkNode M1/M2/M3/M5
+- Keepteen LT1, Mesh Pocket, Nano G2 Ultra, Meshtiny
 
 ### Incompatible Devices (No Display)
 

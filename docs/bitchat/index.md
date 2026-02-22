@@ -110,9 +110,9 @@ Bitchat requires **either a display with buttons** OR **button-only with LED fee
 
 | Status | Device Examples | Count |
 |--------|-----------------|-------|
-| ✅ **Compatible (with display)** | Heltec V3, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. | **43 devices** |
-| ✅ **Compatible (button-only)** | T1000-E | **1 device** |
-| ❌ **Not Compatible** | Xiao C3/nRF52, devices without screens or buttons | Future CLI support |
+| ✅ **Compatible (with display)** | Heltec V3/V4, Wio Tracker L1, RAK4631, LilyGo T-Deck, etc. | **41 devices** |
+| ✅ **Compatible (button-only)** | T1000-E, RAK WisMesh Tag | **2 devices** |
+| ❌ **Not Compatible** | ESP32 320KB (Heltec v2, T-Beam), Xiao C3/nRF52, no display devices | Future CLI support |
 
 **[📋 See Complete Device List](./compatibility_devices.md)** - Find your specific device
 
