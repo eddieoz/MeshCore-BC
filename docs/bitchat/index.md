@@ -219,6 +219,32 @@ Both platforms provide identical user experience for mode switching.
 | MeshCore Room Servers | ✅ No changes required |
 | Other MeshCore Nodes | ✅ Backward compatible |
 
+## Future Support for Display-Less Devices
+
+Devices without displays or buttons may receive Bitchat support through:
+
+- **CLI Configuration**: `bitchat enable` command via serial
+- **Startup Mode**: Default to Bitchat mode on boot
+- **Companion App**: Configure via USB/BLE from phone
+
+Planned for future releases. Priority will be given to popular devices like:
+- Xiao series
+- Heltec Mesh Solar
+
+## Testers Wanted!
+
+If you have any of the **build-verified** devices above, please test and report your results:
+
+1. Flash the firmware to your device
+2. Test core functionality:
+   - BLE pairing with BitChat app
+   - Sending/receiving messages
+   - Display navigation (if applicable)
+   - Button controls
+3. Report results in [GitHub Issues](../../issues)
+
+Your feedback helps move devices from "build-verified" to "real-world tested"!
+
 ## References
 
 - [Bitchat Android App](https://github.com/bitchat/bitchat-android)

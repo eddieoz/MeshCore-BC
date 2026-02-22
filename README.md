@@ -92,6 +92,32 @@ Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. S
 | [BLE Service](docs/bitchat/ble_service.md) | BLE GATT service specification |
 | [Architecture](docs/bitchat/architecture.md) | Component architecture and data flow |
 
+## Future Support for Display-Less Devices
+
+Devices without displays or buttons may receive Bitchat support through:
+
+- **CLI Configuration**: `bitchat enable` command via serial
+- **Startup Mode**: Default to Bitchat mode on boot
+- **Companion App**: Configure via USB/BLE from phone
+
+Planned for future releases. Priority will be given to popular devices like:
+- Xiao series
+- Heltec Mesh Solar
+
+## Testers Wanted!
+
+If you have any of the **build-verified** devices above, please test and report your results:
+
+1. Flash the firmware to your device
+2. Test core functionality:
+   - BLE pairing with BitChat app
+   - Sending/receiving messages
+   - Display navigation (if applicable)
+   - Button controls
+3. Report results in [GitHub Issues](https://github.com/eddieoz/MeshCore-BC/issues)
+
+---
+
 # About MeshCore
 
 MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
