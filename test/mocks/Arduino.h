@@ -34,6 +34,12 @@ inline uint32_t millis() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 }
 
+inline uint32_t micros() {
+  auto now = std::chrono::steady_clock::now();
+  auto duration = now.time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+}
+
 inline void delay(uint32_t ms) {
   // No-op for tests or sleep
 }
@@ -52,4 +58,15 @@ inline long random(long min, long max) {
 
 inline long random(long max) {
   return rand() % max;
+}
+
+inline char* ltoa(long val, char* s, int radix) {
+  if (radix == 10) {
+    sprintf(s, "%ld", val);
+  } else if (radix == 16) {
+    sprintf(s, "%lx", val);
+  } else {
+    sprintf(s, "%ld", val); // fallback
+  }
+  return s;
 }

@@ -81,9 +81,6 @@ class HomeScreen : public UIScreen {
     RECENT,
     RADIO,
     BLUETOOTH,
-#ifdef ENABLE_BITCHAT
-    BITCHAT,
-#endif
     ADVERT,
 #if ENV_INCLUDE_GPS == 1
     GPS,
@@ -280,25 +277,6 @@ public:
           32, 32);
       display.setTextSize(1);
       display.drawTextCentered(display.width() / 2, 64 - 11, "toggle: " PRESS_LABEL);
-#ifdef ENABLE_BITCHAT
-    } else if (_page == HomePage::BITCHAT) {
-      // Show current BLE mode with large letter (M for MeshCore, B for BitChat)
-      bool bitchatMode = _task->getSerial()->isBitChatMode();
-      display.setTextSize(3);
-      if (bitchatMode) {
-        display.setColor(DisplayDriver::GREEN);
-        display.drawTextCentered(display.width() / 2, 16, "B");
-        display.setTextSize(1);
-        display.drawTextCentered(display.width() / 2, 42, "BitChat");
-      } else {
-        display.setColor(DisplayDriver::RED);
-        display.drawTextCentered(display.width() / 2, 16, "M");
-        display.setTextSize(1);
-        display.drawTextCentered(display.width() / 2, 42, "MeshCore");
-      }
-      display.setTextSize(1);
-      display.drawTextCentered(display.width() / 2, 54, "toggle: " PRESS_LABEL);
-#endif
     } else if (_page == HomePage::ADVERT) {
       display.setColor(DisplayDriver::GREEN);
       display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
@@ -447,16 +425,6 @@ public:
       }
       return true;
     }
-#ifdef ENABLE_BITCHAT
-    if (c == KEY_ENTER && _page == HomePage::BITCHAT) {
-      if (_task->getSerial()) {
-        _task->getSerial()->setBitChatMode(!_task->getSerial()->isBitChatMode());
-        _task->notify(UIEventType::ack);
-        _task->showAlert(_task->getSerial()->isBitChatMode() ? "BitChat: ON" : "BitChat: OFF", 1000);
-      }
-      return true;
-    }
-#endif
     if (c == KEY_ENTER && _page == HomePage::ADVERT) {
       _task->notify(UIEventType::ack);
       if (the_mesh.advert()) {

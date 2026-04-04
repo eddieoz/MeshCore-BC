@@ -23,6 +23,16 @@
 #define BLE_RX_DRAIN_BUF_SIZE      32
 
 static SerialBLEInterface* instance = nullptr;
+SerialBLEInterface::ExtendedConnectCallback SerialBLEInterface::_extConnectCb = nullptr;
+SerialBLEInterface::ExtendedDisconnectCallback SerialBLEInterface::_extDisconnectCb = nullptr;
+
+void SerialBLEInterface::setExtendedConnectCallback(ExtendedConnectCallback cb) {
+  _extConnectCb = cb;
+}
+
+void SerialBLEInterface::setExtendedDisconnectCallback(ExtendedDisconnectCallback cb) {
+  _extDisconnectCb = cb;
+}
 
 void SerialBLEInterface::onConnect(uint16_t connection_handle) {
   BLE_DEBUG_PRINTLN("SerialBLEInterface: connected handle=0x%04X", connection_handle);
@@ -30,6 +40,9 @@ void SerialBLEInterface::onConnect(uint16_t connection_handle) {
     instance->_conn_handle = connection_handle;
     instance->_isDeviceConnected = false;
     instance->clearBuffers();
+  }
+  if (_extConnectCb) {
+    _extConnectCb(connection_handle);
   }
 }
 
@@ -41,6 +54,9 @@ void SerialBLEInterface::onDisconnect(uint16_t connection_handle, uint8_t reason
       instance->_isDeviceConnected = false;
       instance->clearBuffers();
     }
+  }
+  if (_extDisconnectCb) {
+    _extDisconnectCb(connection_handle, reason);
   }
 }
 
@@ -396,4 +412,119 @@ bool SerialBLEInterface::isConnected() const {
 
 bool SerialBLEInterface::isWriteBusy() const {
   return send_queue_len >= (FRAME_QUEUE_SIZE * 2 / 3);
+}
+
+// ============================================================
+// BitChat Support Methods
+// ============================================================
+
+bool SerialBLEInterface::addSecondaryService(BLEService& service) {
+  if (service.begin()) {
+    BLE_DEBUG_PRINTLN("SerialBLEInterface: Added secondary service");
+    return true;
+  }
+  BLE_DEBUG_PRINTLN("SerialBLEInterface: Failed to add secondary service");
+  return false;
+}
+
+void SerialBLEInterface::restartAdvertising(BLEService* secondaryService) {
+  // Stop current advertising
+  Bluefruit.Advertising.stop();
+
+  // Clear and rebuild advertising data
+  Bluefruit.Advertising.clearData();
+  Bluefruit.ScanResponse.clearData();
+
+  // Add standard flags
+  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addTxPower();
+
+  // Add primary service
+  Bluefruit.Advertising.addService(bleuart);
+
+  // Add device name to scan response
+  Bluefruit.ScanResponse.addName();
+
+  // Add secondary service to scan response if provided
+  if (secondaryService != nullptr) {
+    Bluefruit.ScanResponse.addService(*secondaryService);
+    BLE_DEBUG_PRINTLN("SerialBLEInterface: Added secondary service to scan response");
+  }
+
+  // Restart advertising
+  Bluefruit.Advertising.restartOnDisconnect(true);
+  Bluefruit.Advertising.setInterval(BLE_ADV_INTERVAL_MIN, BLE_ADV_INTERVAL_MAX);
+  Bluefruit.Advertising.setFastTimeout(BLE_ADV_FAST_TIMEOUT);
+  Bluefruit.Advertising.start(0);
+
+  BLE_DEBUG_PRINTLN("SerialBLEInterface: Advertising restarted with all services");
+}
+
+// ============================================================
+// BLE Mode Switching (MeshCore UART <-> BitChat)
+// ============================================================
+
+void SerialBLEInterface::setBitChatMode(bool enable) {
+  if (_bitchatMode == enable) return; // No change needed
+
+  _bitchatMode = enable;
+
+  // Disconnect any connected clients before switching modes
+  if (Bluefruit.connected() > 0) {
+    Serial.println("[BLE] Disconnecting connected client(s) for mode switch...");
+    
+    if (_conn_handle != BLE_CONN_HANDLE_INVALID) {
+      sd_ble_gap_disconnect(_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+    }
+    
+    for (uint8_t idx = 0; idx < Bluefruit.connected(); idx++) {
+      BLEConnection* conn = Bluefruit.Connection(idx);
+      if (conn && conn->connected()) {
+        conn->disconnect();
+      }
+    }
+    
+    unsigned long disconnectStart = millis();
+    while (Bluefruit.connected() > 0 && (millis() - disconnectStart) < 2000) {
+      delay(10);
+    }
+    
+    _conn_handle = BLE_CONN_HANDLE_INVALID;
+    _isDeviceConnected = false;
+    clearBuffers();
+  }
+
+  // Stop current advertising
+  Bluefruit.Advertising.stop();
+
+  // Clear and rebuild advertising data
+  Bluefruit.Advertising.clearData();
+  Bluefruit.ScanResponse.clearData();
+
+  // Add standard flags
+  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addTxPower();
+
+  if (_bitchatMode && _bitchatService != nullptr) {
+    // BitChat mode: advertise only BitChat service
+    Bluefruit.Advertising.addService(*_bitchatService);
+    BLE_DEBUG_PRINTLN("SerialBLEInterface: Switched to BitChat mode");
+    Serial.println("[BLE] Switched to BitChat mode");
+  } else {
+    // MeshCore mode: advertise only BLEUart service
+    Bluefruit.Advertising.addService(bleuart);
+    BLE_DEBUG_PRINTLN("SerialBLEInterface: Switched to MeshCore mode");
+    Serial.println("[BLE] Switched to MeshCore mode");
+  }
+
+  // Add device name to scan response
+  Bluefruit.ScanResponse.addName();
+
+  // Restart advertising
+   Bluefruit.Advertising.restartOnDisconnect(true);
+  Bluefruit.Advertising.setInterval(BLE_ADV_INTERVAL_MIN, BLE_ADV_INTERVAL_MAX);
+  Bluefruit.Advertising.setFastTimeout(BLE_ADV_FAST_TIMEOUT);
+  Bluefruit.Advertising.start(0);
+
+  Serial.println("[BLE] Advertising restarted - ready for new connections");
 }

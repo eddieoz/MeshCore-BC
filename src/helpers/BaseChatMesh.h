@@ -63,10 +63,6 @@ class BaseChatMesh : public mesh::Mesh {
   int sort_array[MAX_CONTACTS];
   int matching_peer_indexes[MAX_SEARCH_RESULTS];
   unsigned long txt_send_timeout;
-#ifdef MAX_GROUP_CHANNELS
-  ChannelDetails channels[MAX_GROUP_CHANNELS];
-  int num_channels;  // only for addChannel()
-#endif
   mesh::Packet* _pendingLoopback;
   uint8_t temp_buf[MAX_TRANS_UNIT];
   ConnectionInfo connections[MAX_CONNECTIONS];
@@ -75,6 +71,11 @@ class BaseChatMesh : public mesh::Mesh {
   void sendAckTo(const ContactInfo& dest, uint32_t ack_hash);
 
 protected:
+#ifdef MAX_GROUP_CHANNELS
+  ChannelDetails channels[MAX_GROUP_CHANNELS];
+  int num_channels;  // only for addChannel()
+#endif
+
   BaseChatMesh(mesh::Radio& radio, mesh::MillisecondClock& ms, mesh::RNG& rng, mesh::RTCClock& rtc, mesh::PacketManager& mgr, mesh::MeshTables& tables)
       : mesh::Mesh(radio, ms, rng, rtc, mgr, tables)
   { 

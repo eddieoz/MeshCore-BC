@@ -69,7 +69,6 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   _userButton->onDoublePress([this]() { handleButtonDoublePress(); });
   _userButton->onTriplePress([this]() { handleButtonTriplePress(); });
   _userButton->onQuadruplePress([this]() { handleButtonQuadruplePress(); });
-  _userButton->onQuintuplePress([this]() { handleButtonQuintuplePress(); });
   _userButton->onLongPress([this]() { handleButtonLongPress(); });
   _userButton->onAnyPress([this]() { handleButtonAnyPress(); });
 #endif
@@ -84,7 +83,6 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   _userButtonAnalog->onDoublePress([this]() { handleButtonDoublePress(); });
   _userButtonAnalog->onTriplePress([this]() { handleButtonTriplePress(); });
   _userButtonAnalog->onQuadruplePress([this]() { handleButtonQuadruplePress(); });
-  _userButtonAnalog->onQuintuplePress([this]() { handleButtonQuintuplePress(); });
   _userButtonAnalog->onLongPress([this]() { handleButtonLongPress(); });
   _userButtonAnalog->onAnyPress([this]() { handleButtonAnyPress(); });
 #endif
@@ -256,14 +254,7 @@ void UITask::renderCurrScreen() {
       _display->print(tmp);
       _display->setColor(DisplayDriver::GREEN);
     } else {
-      _display->setColor(DisplayDriver::LIGHT);
-#ifdef ENABLE_BITCHAT
-      if (_serial && _serial->isBitChatMode()) {
-        _display->setCursor(0, 43);
-        _display->setColor(DisplayDriver::GREEN);
-        _display->print("BITCHAT ON");
-      }
-#endif
+      _display->setColor(DisplayDriver::LIGHT); 
     }
   }
   _need_refresh = false;
@@ -443,32 +434,6 @@ void UITask::handleButtonQuadruplePress() {
     }
   }
   _need_refresh = true;
-}
-
-void UITask::handleButtonQuintuplePress() {
-  MESH_DEBUG_PRINTLN("UITask: quintuple press triggered");
-#ifdef ENABLE_BITCHAT
-  if (_serial) {
-    bool newBitChatMode = !_serial->isBitChatMode();
-    _serial->setBitChatMode(newBitChatMode);
-
-    // LED feedback - 3 blinks to confirm mode change
-#ifdef LED_PIN
-    for (int i = 0; i < 3; i++) {
-      digitalWrite(LED_PIN, HIGH);
-      delay(newBitChatMode ? 150 : 500);  // Fast for BitChat, slow for MeshCore
-      digitalWrite(LED_PIN, LOW);
-      delay(newBitChatMode ? 150 : 500);
-    }
-#endif
-
-#ifdef PIN_BUZZER
-    notify(UIEventType::ack);
-#endif
-    snprintf(_alert, sizeof(_alert), "BitChat: %s", _serial->isBitChatMode() ? "ON" : "OFF");
-    _need_refresh = true;
-  }
-#endif
 }
 
 void UITask::handleButtonLongPress() {

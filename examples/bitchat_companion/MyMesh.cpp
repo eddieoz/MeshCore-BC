@@ -552,7 +552,14 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
   i += tlen;
   addToOfflineQueue(out_frame, i);
 
-  if (_serial->isConnected()) {
+  // Skip MeshCore serial push when in BitChat-only mode
+#ifdef ENABLE_BITCHAT
+  bool skipSerial = (getBitchatBridge() != nullptr && _serial->isBitChatMode());
+#else
+  bool skipSerial = false;
+#endif
+
+  if (!skipSerial && _serial->isConnected()) {
     uint8_t frame[1];
     frame[0] = PUSH_CODE_MSG_WAITING; // send push 'tickle'
     _serial->writeFrame(frame, 1);
@@ -718,7 +725,7 @@ bool MyMesh::onContactPathRecv(ContactInfo& contact, uint8_t* in_path, uint8_t i
     }
   }
   // let base class handle received path and data
-  return mesh::bitchat::BitchatMesh::onContactPathRecv(contact, in_path, in_path_len, out_path, out_path_len, extra_type, extra, extra_len);
+  return BaseChatMesh::onContactPathRecv(contact, in_path, in_path_len, out_path, out_path_len, extra_type, extra, extra_len);
 }
 
 void MyMesh::onControlDataRecv(mesh::Packet *packet) {
@@ -839,7 +846,7 @@ MyMesh::MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMe
 }
 
 void MyMesh::begin(bool has_display) {
-  mesh::bitchat::BitchatMesh::begin();
+  BaseChatMesh::begin();
 
   if (!_store->loadMainIdentity(self_id)) {
     self_id = radio_new_identity(); // create new random identity
@@ -2056,6 +2063,12 @@ void MyMesh::loop() {
 #ifdef DISPLAY_CLASS
   if (_ui) _ui->setHasConnection(_serial->isConnected());
 #endif
+
+#ifdef ENABLE_BITCHAT
+  if (getBitchatBridge() != nullptr) {
+    getBitchatBridge()->loop();
+  }
+#endif
 }
 
 bool MyMesh::advert() {
@@ -2072,7 +2085,6 @@ bool MyMesh::advert() {
     return false;
   }
 }
-
 #ifdef ENABLE_BITCHAT
 void MyMesh::initBitchat(BitchatBridge *bridge) {
   setBitchatBridge(bridge);

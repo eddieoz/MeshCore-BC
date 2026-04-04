@@ -70,6 +70,11 @@
 #include <helpers/bitchat/BitchatMesh.h>
 #include <helpers/TransportKeyStore.h>
 
+// ENABLE_BITCHAT support - Forward declaration to avoid circular dependency
+#ifdef ENABLE_BITCHAT
+class BitchatBridge;
+#endif
+
 /* -------------------------------------------------------------------------------------- */
 
 #define REQ_TYPE_GET_STATUS             0x01 // same as _GET_STATS
@@ -98,6 +103,11 @@ public:
   void loop();
   void handleCmdFrame(size_t len);
   bool advert();
+
+#ifdef ENABLE_BITCHAT
+  void initBitchat(BitchatBridge *bridge);
+  bool initBitchatMeshChannel();
+#endif
   void enterCLIRescue();
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
@@ -162,10 +172,6 @@ protected:
 
 public:
   void savePrefs() { _store->savePrefs(_prefs, sensors.node_lat, sensors.node_lon); }
-#ifdef ENABLE_BITCHAT
-  void initBitchat(BitchatBridge *bridge);
-  bool initBitchatMeshChannel();
-#endif
 
 private:
   void writeOKFrame();

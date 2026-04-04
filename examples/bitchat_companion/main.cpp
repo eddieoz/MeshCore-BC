@@ -2,6 +2,12 @@
 #include <Mesh.h>
 #include "MyMesh.h"
 
+// BitChat bridge - instantiated with mesh and identity references
+#if defined(ENABLE_BITCHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+#include <helpers/bitchat/BitchatBridge.h>
+BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
+#endif
+
 // Believe it or not, this std C function is busted on some platforms!
 static uint32_t _atoi(const char* sp) {
   uint32_t n = 0;
@@ -99,12 +105,6 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
    #endif
 );
 
-// BitChat bridge - instantiated with mesh and identity references
-#if defined(ENABLE_BITCHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
-#include <helpers/bitchat/BitchatBridge.h>
-BitchatBridge bitchat_bridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
-#endif
-
 /* END GLOBAL OBJECTS */
 
 void halt() {
@@ -158,37 +158,28 @@ void setup() {
 
 #ifdef BLE_PIN_CODE
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
-  serial_interface.enable();
+#else
+  serial_interface.begin(Serial);
+#endif
+  the_mesh.startInterface(serial_interface);
 
-  // Initialize BitChat bridge for nRF52
-  #ifdef ENABLE_BITCHAT
+#if defined(NRF52_PLATFORM)
+#ifdef ENABLE_BITCHAT
   Serial.println("[BitChat] Initializing bridge...");
   bitchat_bridge.begin();
   if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
-    Serial.println("[BitChat] BLE service initialized");
+    Serial.println("[BitChat] BLE advertising started.");
+  }
+#ifdef BLE_PIN_CODE
+  {
     mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
     serial_interface.setBitChatService(&bitchatService.getNRF52Service());
-    Serial.println("[BitChat] Service registered for mode switching");
-  } else {
-    Serial.println("[BitChat] ERROR: BLE service initialization failed");
   }
-  the_mesh.initBitchat(&bitchat_bridge);
-  Serial.println("[BitChat] Bridge fully initialized and registered with mesh");
-  #endif
-#else
-  serial_interface.begin(Serial);
-
-  #ifdef ENABLE_BITCHAT
-  Serial.println("Initializing BitChat bridge...");
-  bitchat_bridge.begin();
-  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
-    Serial.println("BitChat BLE service started (standalone mode)");
-  }
-  the_mesh.initBitchat(&bitchat_bridge);
-  Serial.println("BitChat bridge initialized");
-  #endif
 #endif
-  the_mesh.startInterface(serial_interface);
+  the_mesh.initBitchat(&bitchat_bridge);
+  Serial.println("[BitChat] Bridge initialized.");
+#endif // ENABLE_BITCHAT
+#endif // NRF52_PLATFORM
 #elif defined(RP2040_PLATFORM)
   LittleFS.begin();
   store.begin();
@@ -232,15 +223,6 @@ void setup() {
   serial_interface.begin(TCP_PORT);
 #elif defined(BLE_PIN_CODE)
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
-
-  // Initialize BitChat bridge for ESP32
-  #ifdef ENABLE_BITCHAT
-  Serial.println("[BitChat] Initializing bridge...");
-  bitchat_bridge.begin();
-  Serial.println("[BitChat] Bridge begin() called");
-  the_mesh.initBitchat(&bitchat_bridge);
-  Serial.println("[BitChat] Bridge initialized and registered with mesh");
-  #endif
 #elif defined(SERIAL_RX)
   companion_serial.setPins(SERIAL_RX, SERIAL_TX);
   companion_serial.begin(115200);
@@ -249,6 +231,23 @@ void setup() {
   serial_interface.begin(Serial);
 #endif
   the_mesh.startInterface(serial_interface);
+
+#ifdef ENABLE_BITCHAT
+  Serial.println("[BitChat] Initializing bridge...");
+  bitchat_bridge.begin();
+  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("[BitChat] BLE advertising started.");
+  }
+#ifdef BLE_PIN_CODE
+  {
+    mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
+    bitchatService.initESP32(the_mesh.getNodeName());
+    serial_interface.setBitChatService(bitchatService.getESP32Service());
+  }
+#endif
+  the_mesh.initBitchat(&bitchat_bridge);
+  Serial.println("[BitChat] Bridge initialized.");
+#endif // ENABLE_BITCHAT
 #else
   #error "need to define filesystem"
 #endif

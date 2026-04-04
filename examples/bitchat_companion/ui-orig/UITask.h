@@ -49,7 +49,6 @@ class UITask : public AbstractUITask {
   void handleButtonDoublePress();
   void handleButtonTriplePress();
   void handleButtonQuadruplePress();
-  void handleButtonQuintuplePress();
   void handleButtonLongPress();
 
  

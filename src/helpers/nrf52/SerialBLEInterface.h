@@ -41,6 +41,18 @@ class SerialBLEInterface : public BaseSerialInterface {
   static void onBLEEvent(ble_evt_t* evt);
   static void onBleUartRX(uint16_t conn_handle);
 
+  // Extended callbacks for secondary services (e.g. BitChat)
+  typedef void (*ExtendedConnectCallback)(uint16_t conn_handle);
+  typedef void (*ExtendedDisconnectCallback)(uint16_t conn_handle, uint8_t reason);
+
+private:
+  static ExtendedConnectCallback _extConnectCb;
+  static ExtendedDisconnectCallback _extDisconnectCb;
+
+public:
+  static void setExtendedConnectCallback(ExtendedConnectCallback cb);
+  static void setExtendedDisconnectCallback(ExtendedDisconnectCallback cb);
+
 public:
   SerialBLEInterface() {
     _isEnabled = false;
@@ -68,6 +80,41 @@ public:
   bool isWriteBusy() const override;
   size_t writeFrame(const uint8_t src[], size_t len) override;
   size_t checkRecvFrame(uint8_t dest[]) override;
+
+  // BitChat support methods (ESP32 compatible API)
+  void *getBLEServer() { return nullptr; } // nRF52 uses Bluefruit, not BLEServer - return void*
+  void addAdvertisingServiceUUID(const char *uuid) {
+    // nRF52: Add UUID to advertising using Bluefruit API
+    // TODO: Implement when BitChat BLE service is added for nRF52
+    (void)uuid;
+  }
+
+  /**
+   * @brief Add a secondary BLE service (for BitChat coexistence)
+   * @return true if service was added successfully
+   */
+  bool addSecondaryService(BLEService &service);
+
+  /**
+   * @brief Restart advertising to include new services
+   * @param secondaryService Optional secondary service to include in advertising
+   */
+  void restartAdvertising(BLEService *secondaryService = nullptr);
+
+  // BLE Mode switching (MeshCore UART vs BitChat)
+  bool isBitChatMode() const override { return _bitchatMode; }
+  void setBitChatMode(bool enable) override;
+
+private:
+  bool _bitchatMode = false;             // false = MeshCore mode, true = BitChat mode
+  BLEService *_bitchatService = nullptr; // Cached BitChat service pointer
+
+public:
+  /**
+   * @brief Set the BitChat service for mode switching
+   * @param service Pointer to BitChat BLEService
+   */
+  void setBitChatService(BLEService *service) { _bitchatService = service; }
 };
 
 #if BLE_DEBUG_LOGGING && ARDUINO
