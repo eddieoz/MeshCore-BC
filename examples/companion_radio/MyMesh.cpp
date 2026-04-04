@@ -2041,6 +2041,12 @@ void MyMesh::checkSerialInterface() {
 void MyMesh::loop() {
   mesh::bitchat::BitchatMesh::loop();
 
+#ifdef ENABLE_BITCHAT
+  if (getBitchatBridge() != nullptr) {
+    getBitchatBridge()->loop();
+  }
+#endif
+
   if (_cli_rescue) {
     checkCLIRescueCmd();
   } else {
