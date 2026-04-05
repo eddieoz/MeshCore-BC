@@ -17,6 +17,9 @@ class SerialBLEInterface : public BaseSerialInterface, BLESecurityCallbacks, BLE
   uint32_t _pin_code;
   unsigned long _last_write;
   unsigned long adv_restart_time;
+  char _deviceName[48];  // Store device name for advertising updates
+  bool _bitchatMode = false;
+  BLEService *_bitchatService = nullptr;
 
   struct Frame {
     uint8_t len;
@@ -75,6 +78,11 @@ public:
   bool isEnabled() const override { return _isEnabled; }
 
   bool isConnected() const override;
+
+  bool isBitChatMode() const override { return _bitchatMode; }
+  void setBitChatMode(bool enable) override;
+  void setBitChatService(BLEService *service) { _bitchatService = service; }
+  void addAdvertisingServiceUUID(const char *uuid);
 
   bool isWriteBusy() const override;
   size_t writeFrame(const uint8_t src[], size_t len) override;

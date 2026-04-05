@@ -237,9 +237,17 @@ void setup() {
   #ifdef ENABLE_BITCHAT
   Serial.println("[BitChat] Initializing bridge...");
   bitchat_bridge.begin();
-  Serial.println("[BitChat] Bridge begin() called");
+  if (bitchat_bridge.beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("[BitChat] BLE service initialized");
+    mesh::ble::BitchatBLEService &bitchatService = bitchat_bridge.getBLEService();
+    bitchatService.initESP32(the_mesh.getNodeName());
+    serial_interface.setBitChatService(bitchatService.getESP32Service());
+    Serial.println("[BitChat] Service registered for mode switching");
+  } else {
+    Serial.println("[BitChat] ERROR: BLE service initialization failed");
+  }
   the_mesh.initBitchat(&bitchat_bridge);
-  Serial.println("[BitChat] Bridge initialized and registered with mesh");
+  Serial.println("[BitChat] Bridge fully initialized and registered with mesh");
   #endif
 #elif defined(SERIAL_RX)
   companion_serial.setPins(SERIAL_RX, SERIAL_TX);

@@ -23,6 +23,10 @@ void SerialBLEInterface::begin(const char* prefix, char* name, uint32_t pin_code
   char dev_name[32+16];
   sprintf(dev_name, "%s%s", prefix, name);
 
+  // Store device name for later use (e.g., in setBitChatMode)
+  strncpy(_deviceName, dev_name, sizeof(_deviceName) - 1);
+  _deviceName[sizeof(_deviceName) - 1] = '\0';
+
   // Create the BLE Device
   BLEDevice::init(dev_name);
   BLEDevice::setSecurityCallbacks(this);
@@ -125,6 +129,70 @@ void SerialBLEInterface::onWrite(BLECharacteristic* pCharacteristic, esp_ble_gat
     memcpy(recv_queue[recv_queue_len].buf, rxValue, len);
     recv_queue_len++;
   }
+}
+
+// ============================================================
+// BitChat Support Methods
+// ============================================================
+
+void SerialBLEInterface::setBitChatMode(bool enable) {
+  if (_bitchatMode == enable) return; // No change needed
+
+  _bitchatMode = enable;
+
+  // Disconnect any connected clients before switching modes
+  if (pServer->getConnectedCount() > 0) {
+    Serial.println("[BLE] Disconnecting connected client(s) for mode switch...");
+
+    auto peerDevices = pServer->getPeerDevices(true); // true = as server
+    for (auto &peer : peerDevices) {
+      uint16_t connId = peer.first;
+      pServer->disconnect(connId);
+    }
+
+    unsigned long disconnectStart = millis();
+    while (pServer->getConnectedCount() > 0 && (millis() - disconnectStart) < 2000) {
+      delay(10);
+    }
+
+    if (pServer->getConnectedCount() > 0) {
+      Serial.println("[BLE] Warning: Some clients still connected after disconnect attempt");
+    } else {
+      Serial.println("[BLE] All clients disconnected");
+    }
+  }
+
+  // Stop current advertising
+  pServer->getAdvertising()->stop();
+
+  // Create new advertisement data
+  BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
+  BLEAdvertisementData oScanResponseData = BLEAdvertisementData();
+
+  oAdvertisementData.setFlags(0x04); // BR_EDR_NOT_SUPPORTED 0x04
+
+  if (_bitchatMode && _bitchatService != nullptr) {
+    // BitChat mode: advertise BitChat service
+    oAdvertisementData.setCompleteServices(BLEUUID(_bitchatService->getUUID()));
+    BLE_DEBUG_PRINTLN("SerialBLEInterface: Switched to BitChat mode");
+  } else {
+    // MeshCore mode: advertise UART service
+    oAdvertisementData.setCompleteServices(BLEUUID(SERVICE_UUID));
+    BLE_DEBUG_PRINTLN("SerialBLEInterface: Switched to MeshCore mode");
+  }
+
+  // Apply new advertisement data
+  pServer->getAdvertising()->setAdvertisementData(oAdvertisementData);
+
+  // Update scan response with device name
+  oScanResponseData.setName(_deviceName);
+  pServer->getAdvertising()->setScanResponseData(oScanResponseData);
+
+  // Restart advertising
+  pServer->getAdvertising()->start();
+  adv_restart_time = 0;
+
+  Serial.println("[BLE] Advertising restarted - ready for new connections");
 }
 
 // ---------- public methods
@@ -250,4 +318,11 @@ size_t SerialBLEInterface::checkRecvFrame(uint8_t dest[]) {
 
 bool SerialBLEInterface::isConnected() const {
   return deviceConnected;  //pServer != NULL && pServer->getConnectedCount() > 0;
+}
+
+void SerialBLEInterface::addAdvertisingServiceUUID(const char *uuid) {
+  if (pServer != NULL) {
+    pServer->getAdvertising()->addServiceUUID(uuid);
+    BLE_DEBUG_PRINTLN("Added service UUID to advertising: %s", uuid);
+  }
 }

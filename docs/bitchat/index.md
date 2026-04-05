@@ -81,6 +81,8 @@ Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. S
 
 ## Documentation Structure
 
+### User Documentation
+
 | Document | Description |
 |----------|-------------|
 | [Build Configuration](./build_configuration.md) | **ENABLE_BITCHAT flag**, build options, compilation settings |
@@ -91,6 +93,14 @@ Press the user button **5 times rapidly** (within ~3 seconds) to toggle modes. S
 | [Payloads](./payloads.md) | Bitchat payload types and structures |
 | [BLE Service](./ble_service.md) | BLE GATT service specification |
 | [Architecture](./architecture.md) | Component architecture and data flow |
+
+### Developer Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Integration Guide (1.14.1)](./developer/integration-guide-1.14.1.md) | **Complete integration guide** for developers |
+| [Code Review Report](./developer/code-review-1.14.1.md) | Code review findings and security analysis |
+| [Migration Guide](./developer/migration-guide.md) | **Porting to new MeshCore versions** |
 
 ## Quick Start
 

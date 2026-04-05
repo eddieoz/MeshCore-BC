@@ -52,8 +52,10 @@ void Button::update() {
             triggerEvent(DOUBLE_PRESS);
         } else if (_clickCount == 3) {
             triggerEvent(TRIPLE_PRESS);
-        } else if (_clickCount >= 4) {
+        } else if (_clickCount == 4) {
             triggerEvent(QUADRUPLE_PRESS);
+        } else if (_clickCount >= 5) {
+            triggerEvent(QUINTUPLE_PRESS);
         }
 
         _clickCount = 0;
@@ -121,6 +123,9 @@ void Button::triggerEvent(EventType event) {
             break;
         case QUADRUPLE_PRESS:
             if (_onQuadruplePress) _onQuadruplePress();
+            break;
+        case QUINTUPLE_PRESS:
+            if (_onQuintuplePress) _onQuintuplePress();
             break;
         case LONG_PRESS:
             if (_onLongPress) _onLongPress();
